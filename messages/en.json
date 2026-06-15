@@ -1,0 +1,61 @@
+{
+  "builder": {
+    "title": "Create Your Avatar",
+    "sections": {
+      "scene": "Scene",
+      "avatar": "Avatar",
+      "extras": "Extras",
+      "mask": "Mask"
+    },
+    "controls": {
+      "skin": "Skin tone",
+      "hair": "Hair",
+      "shirt": "Shirt",
+      "accessory": "Accessory",
+      "none": "None"
+    },
+    "actions": {
+      "randomize": "Surprise me",
+      "export": "Create my PFP",
+      "keyword": "I have a secret key"
+    },
+    "export": {
+      "title": "Your Avatar is Ready",
+      "message": "Every piece is unique, just like you.",
+      "download": "Download PNG",
+      "share": "Share"
+    },
+    "keyword": {
+      "placeholder": "Enter your key...",
+      "submit": "Unlock",
+      "success": "Content unlocked!",
+      "error": "Wrong key"
+    },
+    "loading": "Loading..."
+  },
+  "admin": {
+    "nav": {
+      "assets": "Assets",
+      "layers": "Layers",
+      "preview": "Preview",
+      "keywords": "Keywords"
+    },
+    "login": {
+      "title": "Admin — Avatar OS",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Sign in",
+      "error": "Invalid credentials"
+    },
+    "upload": {
+      "title": "Upload assets",
+      "dropzone": "Drag files here or click to select",
+      "detected": "Detected layer",
+      "undetected": "No category — assign manually",
+      "processing": "Processing...",
+      "success": "Asset uploaded",
+      "assign_layer": "Assign layer"
+    },
+    "logout": "Sign out"
+  }
+}

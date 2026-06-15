@@ -1,0 +1,61 @@
+{
+  "builder": {
+    "title": "Crea tu Avatar",
+    "sections": {
+      "scene": "Escena",
+      "avatar": "Avatar",
+      "extras": "Extras",
+      "mask": "Máscara"
+    },
+    "controls": {
+      "skin": "Tono de piel",
+      "hair": "Cabello",
+      "shirt": "Camiseta",
+      "accessory": "Accesorio",
+      "none": "Ninguno"
+    },
+    "actions": {
+      "randomize": "Sorpréndeme",
+      "export": "Crear mi PFP",
+      "keyword": "Tengo una clave secreta"
+    },
+    "export": {
+      "title": "Tu Avatar está listo",
+      "message": "Cada pieza es única, como tú.",
+      "download": "Descargar PNG",
+      "share": "Compartir"
+    },
+    "keyword": {
+      "placeholder": "Ingresa tu clave...",
+      "submit": "Desbloquear",
+      "success": "¡Contenido desbloqueado!",
+      "error": "Clave incorrecta"
+    },
+    "loading": "Cargando..."
+  },
+  "admin": {
+    "nav": {
+      "assets": "Assets",
+      "layers": "Capas",
+      "preview": "Preview",
+      "keywords": "Keywords"
+    },
+    "login": {
+      "title": "Admin — Avatar OS",
+      "email": "Email",
+      "password": "Contraseña",
+      "submit": "Iniciar sesión",
+      "error": "Credenciales incorrectas"
+    },
+    "upload": {
+      "title": "Cargar assets",
+      "dropzone": "Arrastra archivos aquí o haz click para seleccionar",
+      "detected": "Capa detectada",
+      "undetected": "Sin categoría — asignar manualmente",
+      "processing": "Procesando...",
+      "success": "Asset cargado",
+      "assign_layer": "Asignar capa"
+    },
+    "logout": "Cerrar sesión"
+  }
+}
