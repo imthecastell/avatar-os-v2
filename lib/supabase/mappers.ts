@@ -16,6 +16,7 @@ export function mapAsset(r: Record<string, unknown>): Asset {
     isDefault:    r.is_default as boolean,
     locked:       r.locked as boolean,
     keywordId:    r.keyword_id as string | null,
+    svgEditable:  r.svg_editable !== false,
   }
 }
 

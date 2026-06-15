@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { detectLayerFromFilename, detectEditableColors } from '@/lib/engine/asset-classifier'
+import { detectLayerFromFilename, detectEditableColors, isSVGEditable } from '@/lib/engine/asset-classifier'
 
 const BUCKET = 'avatar-os-assets'
 
@@ -31,9 +31,11 @@ export async function POST(request: NextRequest) {
 
   // Detect colors if SVG
   let colorMap: object[] = []
+  let svgEditable = true
   if (fileType === 'svg') {
     const text = new TextDecoder().decode(buffer)
     colorMap = detectEditableColors(text)
+    svgEditable = isSVGEditable(text)
   }
 
   // Build storage path
@@ -75,6 +77,7 @@ export async function POST(request: NextRequest) {
       file_type: fileType,
       original_size: bytes.byteLength,
       color_map: colorMap,
+      svg_editable: svgEditable,
     })
     .select()
     .single()

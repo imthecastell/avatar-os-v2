@@ -36,6 +36,7 @@ export interface Asset {
   isDefault:    boolean
   locked:       boolean
   keywordId:    string | null
+  svgEditable:  boolean
 }
 
 export interface ColorEntry {
