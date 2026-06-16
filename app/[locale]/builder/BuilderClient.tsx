@@ -176,7 +176,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
   // Cabello: enlaza hair-back + hair-front por nombre, aplica suggestedColor si existe
   function selectHair(assetId: string | null) {
     setState(s => {
-      const sel = { ...s.selectedAssets, 'hair-back': assetId }
+      const sel: Record<string, string | null> = { ...s.selectedAssets, 'hair-back': assetId }
       if (assetId) {
         const back  = assets.find(a => a.id === assetId)
         const front = back ? assets.find(a => a.layerKey === 'hair-front' && a.name === back.name) : null

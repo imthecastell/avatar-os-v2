@@ -39,13 +39,13 @@ const selectS = { ...inputS }
 interface Props {
   collections: Collection[]
   layers:      Layer[]
-  keywords:    Keyword[]
+  keywords?:   Keyword[]
   onDone?:     () => void
 }
 
 let nextId = 0
 
-export default function BatchUploader({ collections, layers, keywords, onDone }: Props) {
+export default function BatchUploader({ collections, layers, keywords = [], onDone }: Props) {
   const [collectionId, setCollId] = useState(collections[0]?.id ?? '')
   const [queue, setQueue]         = useState<QueueItem[]>([])
   const [dragging, setDragging]   = useState(false)

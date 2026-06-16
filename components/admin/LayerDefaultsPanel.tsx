@@ -46,6 +46,7 @@ export default function LayerDefaultsPanel({ collections, defaults: initial }: P
         return [...without, {
           id:           data.id,
           collectionId: data.collection_id,
+          layerKey:     data.layer_key ?? '',
           tokenId:      data.token_id,
           defaultHex:   data.default_hex,
           defaultName:  data.default_name,
