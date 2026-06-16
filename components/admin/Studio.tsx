@@ -62,6 +62,7 @@ export default function Studio({ collections, layers: initialLayers, assets }: P
   const [saving, setSaving]             = useState(false)
   const [uploading, setUploading]       = useState(false)
   const [uploadLog, setUploadLog]       = useState<string[]>([])
+  const [seeding, setSeeding]           = useState(false)
 
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -200,6 +201,30 @@ export default function Studio({ collections, layers: initialLayers, assets }: P
         <p className="px-4 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.2)' }}>
           Capas {saving && '· guardando…'}
         </p>
+
+        {/* Seed prompt when no layers */}
+        {collLayers.length === 0 && collectionId && (
+          <div className="mx-2 my-2 p-3 rounded-xl text-center" style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.25)' }}>
+            <p className="text-[10px] text-violet-300 mb-2">Sin capas — crea el stack estándar</p>
+            <button
+              onClick={async () => {
+                setSeeding(true)
+                const res = await fetch('/api/layers/seed', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ collectionId }),
+                })
+                setSeeding(false)
+                if (res.ok) window.location.reload()
+                else { const d = await res.json(); alert(d.error) }
+              }}
+              disabled={seeding}
+              className="text-[10px] font-semibold px-3 py-1.5 rounded-lg transition-all disabled:opacity-50"
+              style={{ background: 'rgba(124,58,237,0.7)', color: 'white' }}
+            >
+              {seeding ? 'Creando…' : '⬡ Crear 10 capas'}
+            </button>
+          </div>
+        )}
 
         {/* Layer list */}
         <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">

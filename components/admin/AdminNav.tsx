@@ -5,9 +5,9 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 const NAV_ITEMS = [
-  { key: 'studio',   label: 'Studio',    href: '' },
-  { key: 'keywords', label: 'Keywords',  href: 'keywords' },
-  { key: 'layers',   label: 'Capas',     href: 'layers' },
+  { key: 'studio',      label: 'Studio',      href: '' },
+  { key: 'collections', label: 'Colecciones', href: 'collections' },
+  { key: 'keywords',    label: 'Keywords',    href: 'keywords' },
 ]
 
 export default function AdminNav({ locale }: { locale: string }) {
