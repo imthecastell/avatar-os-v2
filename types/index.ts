@@ -91,10 +91,8 @@ export interface Keyword {
 
 export interface AvatarState {
   collectionId:     string
-  tokens: {
-    'skin-color': string
-    'hair-color': string
-  }
+  tokens:           Record<string, string>   // skin-color, hair-color + extras desbloqueados
   selectedAssets:   Record<string, string | null>
-  unlockedKeywords: string[]
+  unlockedKeywords: string[]                 // keyword IDs desbloqueados
+  extraColor:       boolean                  // true cuando keyword XTRA está activo
 }

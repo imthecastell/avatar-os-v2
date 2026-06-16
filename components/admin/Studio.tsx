@@ -41,6 +41,7 @@ function buildDefaultState(collectionId: string, layers: Layer[], assets: Asset[
     tokens: { 'skin-color': '#D4895A', 'hair-color': '#3B2314' },
     selectedAssets,
     unlockedKeywords: [],
+    extraColor: false,
   }
 }
 

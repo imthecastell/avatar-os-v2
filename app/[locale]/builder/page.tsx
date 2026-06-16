@@ -26,7 +26,7 @@ export default async function BuilderPage({
   if (collection) {
     const [layersRes, assetsRes, exceptionsRes, defaultsRes] = await Promise.all([
       supabase.from('layers').select('*').eq('collection_id', collection.id).order('order_index'),
-      supabase.from('assets').select('*').is('keyword_id', null),
+      supabase.from('assets').select('*'),
       supabase.from('layer_exceptions').select('*').eq('collection_id', collection.id),
       supabase.from('layer_defaults').select('*').eq('collection_id', collection.id),
     ])

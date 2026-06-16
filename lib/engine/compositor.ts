@@ -62,14 +62,14 @@ export class AvatarCompositor {
       this.svgCache.set(asset.cdnUrl, svgText)
     }
 
-    if (layer.colorToken && tokens[layer.colorToken as keyof typeof tokens]) {
+    if (layer.colorToken && tokens[layer.colorToken]) {
       const role = layer.colorToken === 'skin-color' ? 'skin' : 'primary'
       const originalColor = asset.colorMap.find(c => c.role === role)
       if (originalColor) {
         svgText = this.recolorSVG(
           svgText,
           originalColor.original,
-          tokens[layer.colorToken as keyof typeof tokens]
+          tokens[layer.colorToken]
         )
       }
     }

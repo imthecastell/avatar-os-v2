@@ -31,6 +31,7 @@ export default function AdminPreview({ collections, layers, assets, defaults }: 
       ])
     ),
     unlockedKeywords: [],
+    extraColor: false,
   })
 
   const [visibleLayers, setVisibleLayers] = useState<Set<string>>(
