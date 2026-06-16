@@ -5,10 +5,10 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 
 export default function AdminLoginPage() {
-  const [email, setEmail] = useState('')
+  const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [error,    setError]    = useState('')
+  const [loading,  setLoading]  = useState(false)
   const router = useRouter()
   const params = useParams()
   const locale = params.locale as string
@@ -17,51 +17,72 @@ export default function AdminLoginPage() {
     e.preventDefault()
     setError('')
     setLoading(true)
-
     const supabase = createClient()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-
     if (error) {
       setError(error.message)
       setLoading(false)
       return
     }
-
-    window.location.href = `/${locale}/admin/assets`
+    router.push(`/${locale}/admin`)
   }
 
+  const inputC = 'w-full text-sm rounded-xl px-4 py-3 border focus:outline-none transition-colors focus:border-violet-500'
+  const inputS = { background: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)', color: 'white' }
+
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 w-full max-w-sm">
-        <h1 className="text-xl font-semibold text-white mb-6">Avatar OS — Admin</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
-            />
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#07070e' }}>
+      <div
+        className="w-full max-w-sm rounded-3xl p-8"
+        style={{ background: '#111120', border: '1px solid rgba(255,255,255,0.08)' }}
+      >
+        {/* Logo */}
+        <div className="flex items-center gap-3 mb-8">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-lg"
+            style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)' }}
+          >
+            ✦
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Contraseña</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
-            />
+            <p className="text-sm font-semibold text-white">Avatar OS</p>
+            <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Admin panel</p>
           </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+            className={inputC}
+            style={inputS}
+          />
+          <input
+            type="password"
+            placeholder="Contraseña"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+            className={inputC}
+            style={inputS}
+          />
+
+          {error && (
+            <p className="text-xs px-1" style={{ color: 'rgba(252,165,165,1)' }}>{error}</p>
+          )}
+
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-sm transition-colors"
+            className="w-full text-sm font-semibold py-3 rounded-xl disabled:opacity-50 transition-all mt-1"
+            style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: 'white' }}
           >
-            {loading ? 'Iniciando...' : 'Iniciar sesión'}
+            {loading ? 'Iniciando sesión…' : 'Entrar'}
           </button>
         </form>
       </div>

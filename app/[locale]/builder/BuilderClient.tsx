@@ -1,12 +1,39 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import type { AvatarState, Layer, Asset, LayerException, LayerDefault, Collection } from '@/types'
 import type { AvatarCompositor } from '@/lib/engine/compositor'
 import ExportModal from '@/components/builder/ExportModal'
 import Link from 'next/link'
+
+// ── Share URL helpers ─────────────────────────────────────
+function encodeState(state: AvatarState): string {
+  const compact = {
+    c: state.collectionId,
+    t: state.tokens,
+    s: state.selectedAssets,
+    k: state.unlockedKeywords,
+    x: state.extraColor,
+  }
+  return btoa(JSON.stringify(compact))
+}
+
+function decodeState(encoded: string): Partial<AvatarState> | null {
+  try {
+    const d = JSON.parse(atob(encoded))
+    return {
+      collectionId:     d.c,
+      tokens:           d.t,
+      selectedAssets:   d.s,
+      unlockedKeywords: d.k ?? [],
+      extraColor:       d.x ?? false,
+    }
+  } catch {
+    return null
+  }
+}
 
 const AvatarCanvas = dynamic(() => import('@/components/builder/AvatarCanvas'), {
   ssr: false,
@@ -102,7 +129,24 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
   const [locale, setLocale]       = useState(initialLocale)
   const [state, setState]         = useState<AvatarState>(() => buildInitialState(collection, layers, assets, defaults))
   const [exportUrl, setExportUrl] = useState<string | null>(null)
+  const [shareUrl, setShareUrl]   = useState<string | null>(null)
   const compositorRef             = useRef<AvatarCompositor | null>(null)
+
+  // Load avatar state from URL ?s= param on first render
+  useEffect(() => {
+    const params  = new URLSearchParams(window.location.search)
+    const encoded = params.get('s')
+    if (!encoded) return
+    const decoded = decodeState(encoded)
+    if (!decoded) return
+    setState(s => ({
+      ...s,
+      ...(decoded.tokens         ? { tokens:           decoded.tokens }         : {}),
+      ...(decoded.selectedAssets ? { selectedAssets:   decoded.selectedAssets } : {}),
+      ...(decoded.unlockedKeywords ? { unlockedKeywords: decoded.unlockedKeywords } : {}),
+      extraColor: decoded.extraColor ?? false,
+    }))
+  }, [])
 
   // Tab activo: capas visibles del builder (excluye las ocultas)
   const visibleLayers = layers.filter(l => !HIDDEN_IN_BUILDER.has(l.layerKey))
@@ -169,6 +213,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
   function handleExport() {
     if (!compositorRef.current) return
     setExportUrl(compositorRef.current.exportPNG())
+    const encoded = encodeState(state)
+    setShareUrl(`${window.location.origin}/${locale}/builder?s=${encoded}`)
   }
 
   function unlockKeyword(keywordId: string, isXtra: boolean) {
@@ -317,7 +363,13 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
         </aside>
       </div>
 
-      {exportUrl && <ExportModal dataUrl={exportUrl} onClose={() => setExportUrl(null)} />}
+      {exportUrl && (
+        <ExportModal
+          dataUrl={exportUrl}
+          shareUrl={shareUrl ?? undefined}
+          onClose={() => { setExportUrl(null); setShareUrl(null) }}
+        />
+      )}
     </div>
   )
 }
