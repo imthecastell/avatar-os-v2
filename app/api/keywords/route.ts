@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('keywords')
-    .select('id, label, hint')
+    .select('id, keyword, label, hint')
     .eq('collection_id', collectionId)
     .eq('keyword', keyword)
     .eq('active', true)
