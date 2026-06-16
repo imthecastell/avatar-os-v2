@@ -21,22 +21,31 @@ export interface Layer {
   pairedWith:   string | null
 }
 
+export interface AssetTransform {
+  scale:   number   // 0.5 – 2.0, default 1
+  offsetX: number   // px en canvas de 2048, default 0
+  offsetY: number   // px en canvas de 2048, default 0
+}
+
 export interface Asset {
-  id:           string
-  collectionId: string
-  layerKey:     string
-  name:         string
-  filename:     string
-  storagePath:  string
-  cdnUrl:       string
-  thumbUrl:     string | null
-  fileType:     'svg' | 'png' | 'jpg'
-  originalSize: number
-  colorMap:     ColorEntry[]
-  isDefault:    boolean
-  locked:       boolean
-  keywordId:    string | null
-  svgEditable:  boolean
+  id:             string
+  collectionId:   string
+  layerKey:       string
+  name:           string
+  filename:       string
+  storagePath:    string
+  cdnUrl:         string
+  thumbUrl:       string | null
+  fileType:       'svg' | 'png' | 'jpg'
+  originalSize:   number
+  colorMap:       ColorEntry[]
+  isDefault:      boolean
+  locked:         boolean
+  keywordId:      string | null
+  svgEditable:    boolean
+  transform:      AssetTransform
+  suggestedColor: string | null   // color hex sugerido al activar (ej. color del cabello)
+  maskAssetId:    string | null   // asset de máscara a auto-aplicar cuando este está activo
 }
 
 export interface ColorEntry {

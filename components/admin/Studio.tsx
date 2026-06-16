@@ -3,7 +3,8 @@
 import { useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
-import type { Layer, Asset, Collection, AvatarState } from '@/types'
+import type { Layer, Asset, Collection, AvatarState, Keyword } from '@/types'
+import AssetInspector from '@/components/admin/AssetInspector'
 
 const AvatarCanvas = dynamic(() => import('@/components/builder/AvatarCanvas'), { ssr: false })
 
@@ -47,11 +48,12 @@ function buildDefaultState(collectionId: string, layers: Layer[], assets: Asset[
 
 interface Props {
   collections: Collection[]
-  layers: Layer[]
-  assets: Asset[]
+  layers:      Layer[]
+  assets:      Asset[]
+  keywords:    Keyword[]
 }
 
-export default function Studio({ collections, layers: initialLayers, assets }: Props) {
+export default function Studio({ collections, layers: initialLayers, assets, keywords }: Props) {
   const firstCollId = collections[0]?.id ?? ''
   const [collectionId, setCollectionId] = useState(firstCollId)
   const [layers, setLayers] = useState(initialLayers)
@@ -64,6 +66,7 @@ export default function Studio({ collections, layers: initialLayers, assets }: P
   const [uploading, setUploading]       = useState(false)
   const [uploadLog, setUploadLog]       = useState<string[]>([])
   const [seeding, setSeeding]           = useState(false)
+  const [inspecting, setInspecting]     = useState<Asset | null>(null)
 
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -410,6 +413,13 @@ export default function Studio({ collections, layers: initialLayers, assets }: P
                     {/* Hover overlay */}
                     <div className="absolute inset-0 rounded-2xl flex flex-col items-stretch justify-end p-1.5 gap-1 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: 'rgba(0,0,0,0.75)' }}>
                       <button
+                        onClick={e => { e.stopPropagation(); setInspecting(asset) }}
+                        className="text-[9px] font-medium rounded-lg py-1 transition-colors text-white"
+                        style={{ background: 'rgba(255,255,255,0.15)' }}
+                      >
+                        ⚙ Editar
+                      </button>
+                      <button
                         onClick={e => { e.stopPropagation(); setDefault(asset.id) }}
                         className="text-[9px] font-medium rounded-lg py-1 transition-colors text-white"
                         style={{ background: 'rgba(139,92,246,0.9)' }}
@@ -523,6 +533,19 @@ export default function Studio({ collections, layers: initialLayers, assets }: P
           </div>
         </div>
       </aside>
+
+      {/* ══════════════════════════════════════════════════
+          Asset Inspector modal
+      ══════════════════════════════════════════════════ */}
+      {inspecting && (
+        <AssetInspector
+          asset={inspecting}
+          assets={assets}
+          keywords={keywords}
+          onClose={() => setInspecting(null)}
+          onSaved={() => { setInspecting(null); window.location.reload() }}
+        />
+      )}
     </div>
   )
 }

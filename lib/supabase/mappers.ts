@@ -16,7 +16,10 @@ export function mapAsset(r: Record<string, unknown>): Asset {
     isDefault:    r.is_default as boolean,
     locked:       r.locked as boolean,
     keywordId:    r.keyword_id as string | null,
-    svgEditable:  r.svg_editable !== false,
+    svgEditable:    r.svg_editable !== false,
+    transform:      (r.transform as { scale: number; offsetX: number; offsetY: number }) ?? { scale: 1, offsetX: 0, offsetY: 0 },
+    suggestedColor: r.suggested_color as string | null,
+    maskAssetId:    r.mask_asset_id as string | null,
   }
 }
 
