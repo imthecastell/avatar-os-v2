@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { key: 'studio',      label: 'Studio',      href: '' },
   { key: 'collections', label: 'Colecciones', href: 'collections' },
   { key: 'keywords',    label: 'Keywords',    href: 'keywords' },
+  { key: 'exceptions',  label: 'Excepciones', href: 'exceptions' },
 ]
 
 export default function AdminNav({ locale }: { locale: string }) {

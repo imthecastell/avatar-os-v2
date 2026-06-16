@@ -129,7 +129,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     setState(s => ({ ...s, selectedAssets: { ...s.selectedAssets, [layerKey]: assetId } }))
   }
 
-  // Cabello: enlaza hair-back + hair-front por nombre
+  // Cabello: enlaza hair-back + hair-front por nombre, aplica suggestedColor si existe
   function selectHair(assetId: string | null) {
     setState(s => {
       const sel = { ...s.selectedAssets, 'hair-back': assetId }
@@ -137,6 +137,9 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
         const back  = assets.find(a => a.id === assetId)
         const front = back ? assets.find(a => a.layerKey === 'hair-front' && a.name === back.name) : null
         sel['hair-front'] = front?.id ?? null
+        if (back?.suggestedColor) {
+          return { ...s, selectedAssets: sel, tokens: { ...s.tokens, 'hair-color': back.suggestedColor } }
+        }
       } else {
         sel['hair-front'] = null
       }
