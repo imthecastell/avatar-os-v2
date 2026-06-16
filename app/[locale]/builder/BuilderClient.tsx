@@ -272,9 +272,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
       {/* BODY — vertical on mobile, horizontal on desktop */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
 
-        {/* CANVAS — top strip on mobile, fills left on desktop */}
-        <div className="shrink-0 lg:shrink lg:flex-1 flex items-center justify-center relative" style={{ height: 'clamp(180px, 42vw, 260px)' }}>
-          <div className="absolute inset-0 flex items-center justify-center p-4 lg:p-10 lg:static lg:h-full">
+        {/* CANVAS — fixed height strip on mobile, flex-1 on desktop */}
+        <div className="h-56 shrink-0 lg:h-auto lg:flex-1 flex items-center justify-center p-4 lg:p-10 relative">
             <div className="relative h-full aspect-square max-h-full max-w-full">
               <div className="absolute inset-0 rounded-full blur-3xl opacity-15" style={{ background: 'radial-gradient(circle, #7c3aed, transparent 70%)' }} />
               <div className="relative w-full h-full rounded-[28px] lg:rounded-[36px] overflow-hidden" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
@@ -293,7 +292,6 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                 🎲 {t('Aleatorio', 'Random')}
               </button>
             </div>
-          </div>
         </div>
 
         {/* CONTROL PANEL — bottom drawer on mobile, right sidebar on desktop */}
