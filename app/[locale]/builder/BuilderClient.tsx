@@ -269,37 +269,42 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
         </div>
       </header>
 
-      {/* BODY */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* BODY — vertical on mobile, horizontal on desktop */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
 
-        {/* CANVAS */}
-        <div className="flex-1 flex items-center justify-center p-6 lg:p-10 min-w-0">
-          <div className="relative w-full max-w-[420px] aspect-square">
-            <div className="absolute inset-0 rounded-full blur-3xl opacity-15" style={{ background: 'radial-gradient(circle, #7c3aed, transparent 70%)' }} />
-            <div className="relative w-full h-full rounded-[36px] overflow-hidden" style={{ boxShadow: '0 40px 80px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
-              <AvatarCanvas
-                state={state}
-                layers={layers.filter(l => !hiddenLayers.has(l.layerKey))}
-                assets={assets}
-                onCompositorReady={handleCompositorReady}
-              />
+        {/* CANVAS — top strip on mobile, fills left on desktop */}
+        <div className="shrink-0 lg:shrink lg:flex-1 flex items-center justify-center relative" style={{ height: 'clamp(180px, 42vw, 260px)' }}>
+          <div className="absolute inset-0 flex items-center justify-center p-4 lg:p-10 lg:static lg:h-full">
+            <div className="relative h-full aspect-square max-h-full max-w-full">
+              <div className="absolute inset-0 rounded-full blur-3xl opacity-15" style={{ background: 'radial-gradient(circle, #7c3aed, transparent 70%)' }} />
+              <div className="relative w-full h-full rounded-[28px] lg:rounded-[36px] overflow-hidden" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
+                <AvatarCanvas
+                  state={state}
+                  layers={layers.filter(l => !hiddenLayers.has(l.layerKey))}
+                  assets={assets}
+                  onCompositorReady={handleCompositorReady}
+                />
+              </div>
+              <button
+                onClick={randomize}
+                className="absolute bottom-2 left-2 text-[10px] font-medium px-2.5 py-1 rounded-xl backdrop-blur-md lg:text-xs lg:px-3 lg:py-1.5 lg:bottom-3 lg:left-3"
+                style={{ background: 'rgba(0,0,0,0.55)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                🎲 {t('Aleatorio', 'Random')}
+              </button>
             </div>
-            <button
-              onClick={randomize}
-              className="absolute bottom-3 left-3 text-xs font-medium px-3 py-1.5 rounded-xl backdrop-blur-md"
-              style={{ background: 'rgba(0,0,0,0.5)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.1)' }}
-            >
-              🎲 {t('Aleatorio', 'Random')}
-            </button>
           </div>
         </div>
 
-        {/* CONTROL PANEL */}
-        <aside className="w-[300px] lg:w-[340px] flex flex-col border-l shrink-0" style={{ borderColor: 'rgba(255,255,255,0.05)', background: '#0b0b16' }}>
+        {/* CONTROL PANEL — bottom drawer on mobile, right sidebar on desktop */}
+        <aside
+          className="flex-1 flex flex-col border-t lg:border-t-0 lg:border-l lg:w-[320px] lg:shrink-0 lg:flex-none overflow-hidden"
+          style={{ borderColor: 'rgba(255,255,255,0.05)', background: '#0b0b16' }}
+        >
 
-          {/* Tab bar */}
+          {/* Tab bar — horizontally scrollable */}
           <div className="shrink-0 border-b overflow-x-auto" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-            <div className="flex gap-0.5 p-2 min-w-max">
+            <div className="flex gap-0.5 p-1.5 min-w-max">
               {visibleLayers.map(layer => {
                 if (hiddenLayers.has(layer.layerKey)) return null
                 const m        = LAYER_META[layer.layerKey]
@@ -308,14 +313,14 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                   <button
                     key={layer.layerKey}
                     onClick={() => setActiveCat(layer.layerKey)}
-                    className="flex flex-col items-center gap-0.5 px-2.5 py-2 rounded-xl transition-all shrink-0"
+                    className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all shrink-0 lg:px-2.5 lg:py-2"
                     style={{
                       background: isActive ? 'rgba(124,58,237,0.2)' : 'transparent',
                       outline: isActive ? '1px solid rgba(124,58,237,0.4)' : 'none',
                     }}
                   >
-                    <span className="text-base leading-none">{m?.emoji ?? '📁'}</span>
-                    <span className="text-[9px] font-medium whitespace-nowrap" style={{ color: isActive ? '#a78bfa' : 'rgba(255,255,255,0.35)' }}>
+                    <span className="text-sm leading-none lg:text-base">{m?.emoji ?? '📁'}</span>
+                    <span className="text-[8px] font-medium whitespace-nowrap lg:text-[9px]" style={{ color: isActive ? '#a78bfa' : 'rgba(255,255,255,0.35)' }}>
                       {locale === 'en' ? (m?.en ?? layer.labelEn) : (m?.es ?? layer.labelEs)}
                     </span>
                   </button>
@@ -325,7 +330,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          <div className="flex-1 overflow-y-auto p-3 lg:p-4 space-y-4 lg:space-y-5">
             <LayerPanel
               categoryKey={activeCat}
               layers={layers}
@@ -341,7 +346,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
           </div>
 
           {/* Keyword section — siempre visible al fondo */}
-          <div className="shrink-0 border-t p-4" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+          <div className="shrink-0 border-t px-3 py-3 lg:px-4 lg:py-4" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
             <KeywordSection
               collectionId={collection.id}
               state={state}
@@ -351,10 +356,10 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
           </div>
 
           {/* Export CTA */}
-          <div className="shrink-0 px-4 pb-4">
+          <div className="shrink-0 px-3 pb-3 lg:px-4 lg:pb-4">
             <button
               onClick={handleExport}
-              className="w-full text-sm font-semibold py-3 rounded-2xl"
+              className="w-full text-sm font-semibold py-2.5 lg:py-3 rounded-2xl"
               style={{ background: 'linear-gradient(135deg,#6d28d9,#9333ea)', color: 'white', boxShadow: '0 4px 20px rgba(124,58,237,0.35)' }}
             >
               ✨ {t('Crear mi PFP', 'Create my PFP')}
