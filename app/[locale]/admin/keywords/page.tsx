@@ -9,7 +9,7 @@ export default async function AdminKeywordsPage() {
   const { data: rawKeywords }    = await supabase.from('keywords').select('*').order('created_at', { ascending: false })
 
   return (
-    <div>
+    <div className="max-w-4xl mx-auto px-6 py-8 overflow-y-auto h-full">
       <h1 className="text-lg font-semibold text-white mb-6">Keywords</h1>
       <KeywordPanel
         collections={(rawCollections || []).map(mapCollection)}

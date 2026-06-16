@@ -10,9 +10,9 @@ export default async function AdminLayout({
   const { locale } = await params
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
+    <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#07070e', color: 'white' }}>
       <AdminNav locale={locale} />
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="flex-1 flex flex-col overflow-hidden">
         {children}
       </main>
     </div>

@@ -10,7 +10,7 @@ export default async function AdminLayersPage() {
   const { data: rawAssets }      = await supabase.from('assets').select('*')
 
   return (
-    <div>
+    <div className="max-w-5xl mx-auto px-6 py-8 overflow-y-auto h-full">
       <h1 className="text-lg font-semibold text-white mb-6">Capas</h1>
       <LayerSandwich
         collections={(rawCollections || []).map(mapCollection)}
