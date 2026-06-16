@@ -68,7 +68,7 @@ export default function Studio({ collections, layers: initialLayers, assets }: P
 
   // Derive filtered lists
   const collLayers   = layers.filter(l => !collectionId || l.collectionId === collectionId)
-  const layerAssets  = assets.filter(a => a.layerKey === selectedKey && (!collectionId || a.collectionId === collectionId || !a.collectionId))
+  const layerAssets  = assets.filter(a => a.layerKey === selectedKey)
   const selectedLayer = collLayers.find(l => l.layerKey === selectedKey)
   const meta          = LAYER_META[selectedKey] ?? { emoji: '📁', accent: '#6b7280' }
 
