@@ -75,10 +75,10 @@ export default function AdminNav({ locale }: { locale: string }) {
 
         <button
           onClick={handleLogout}
-          className="text-xs transition-colors"
-          style={{ color: 'rgba(255,255,255,0.3)' }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.3)')}
+          className="text-xs font-medium rounded-lg px-2.5 py-1.5 transition-all"
+          style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.09)'; (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.7)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.05)'; (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.4)' }}
         >
           Salir
         </button>

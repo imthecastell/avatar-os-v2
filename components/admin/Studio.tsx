@@ -205,7 +205,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
         )}
 
         <p className="px-4 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.2)' }}>
-          Capas {saving && '· guardando…'}
+          Capas · {collLayers.length}{saving && ' · guardando…'}
         </p>
 
         {/* Seed prompt when no layers */}
@@ -266,17 +266,26 @@ export default function Studio({ collections, layers: initialLayers, assets, key
 
                 <span className="text-sm leading-none">{lmeta.emoji}</span>
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate transition-colors" style={{ color: isActive ? 'white' : 'rgba(255,255,255,0.5)' }}>
-                    {layer.labelEs}
-                  </p>
-                  <p className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                    {count} asset{count !== 1 ? 's' : ''}
-                  </p>
-                </div>
+                <p className="flex-1 min-w-0 text-xs font-medium truncate transition-colors" style={{ color: isActive ? 'white' : 'rgba(255,255,255,0.5)' }}>
+                  {layer.labelEs}
+                </p>
 
-                {hasWarn && <span className="text-yellow-500 text-[9px]">⚠</span>}
-                {layer.locked && <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>🔒</span>}
+                <span
+                  className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 tabular-nums"
+                  style={{
+                    background: count > 0
+                      ? isActive ? `${lmeta.accent}30` : 'rgba(255,255,255,0.07)'
+                      : 'transparent',
+                    color: count > 0
+                      ? isActive ? lmeta.accent : 'rgba(255,255,255,0.22)'
+                      : 'rgba(255,255,255,0.1)',
+                  }}
+                >
+                  {count}
+                </span>
+
+                {hasWarn && <span className="text-yellow-500 text-[9px] shrink-0">⚠</span>}
+                {layer.locked && <span className="text-[9px] shrink-0" style={{ color: 'rgba(255,255,255,0.15)' }}>🔒</span>}
               </div>
             )
           })}
@@ -294,59 +303,71 @@ export default function Studio({ collections, layers: initialLayers, assets, key
       ══════════════════════════════════════════════════ */}
       <section className="flex-1 flex flex-col overflow-hidden">
 
-        {/* Header bar */}
-        <div className="flex items-center gap-2 px-4 h-12 border-b shrink-0" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-          {/* Mode toggle */}
-          <div className="flex items-center rounded-xl p-0.5 shrink-0" style={{ background: 'rgba(255,255,255,0.05)' }}>
-            <button
-              onClick={() => setCenterMode('assets')}
-              className="text-[11px] font-medium px-3 py-1 rounded-lg transition-all"
-              style={{
-                background: centerMode === 'assets' ? 'rgba(124,58,237,0.85)' : 'transparent',
-                color: centerMode === 'assets' ? 'white' : 'rgba(255,255,255,0.4)',
-              }}
-            >
-              Assets
-            </button>
-            <button
-              onClick={() => setCenterMode('batch')}
-              className="text-[11px] font-medium px-3 py-1 rounded-lg transition-all"
-              style={{
-                background: centerMode === 'batch' ? 'rgba(124,58,237,0.85)' : 'transparent',
-                color: centerMode === 'batch' ? 'white' : 'rgba(255,255,255,0.4)',
-              }}
-            >
-              ⬆ Lote
-            </button>
-          </div>
+        {/* Tab bar */}
+        <div className="flex items-stretch shrink-0 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#0c0c18', height: 46 }}>
 
+          {/* Assets tab */}
+          <button
+            onClick={() => setCenterMode('assets')}
+            className="flex items-center gap-2 px-4 text-xs font-semibold shrink-0 transition-colors"
+            style={{
+              color: centerMode === 'assets' ? 'white' : 'rgba(255,255,255,0.38)',
+              borderBottom: `2px solid ${centerMode === 'assets' ? '#7c3aed' : 'transparent'}`,
+            }}
+          >
+            <span className="text-base leading-none">{meta.emoji}</span>
+            <span className="truncate max-w-[140px]">{selectedLayer?.labelEs ?? 'Assets'}</span>
+            <span
+              className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full"
+              style={{
+                background: centerMode === 'assets' ? 'rgba(124,58,237,0.3)' : 'rgba(255,255,255,0.06)',
+                color: centerMode === 'assets' ? '#c4b5fd' : 'rgba(255,255,255,0.2)',
+              }}
+            >
+              {layerAssets.length}
+            </span>
+          </button>
+
+          <div className="w-px my-3 shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }} />
+
+          {/* Batch tab */}
+          <button
+            onClick={() => setCenterMode('batch')}
+            className="flex items-center gap-1.5 px-4 text-xs font-semibold shrink-0 transition-colors"
+            style={{
+              color: centerMode === 'batch' ? 'white' : 'rgba(255,255,255,0.38)',
+              borderBottom: `2px solid ${centerMode === 'batch' ? '#7c3aed' : 'transparent'}`,
+            }}
+          >
+            <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+            Carga por lote
+          </button>
+
+          <div className="flex-1" />
+
+          {/* Upload button — assets mode only */}
           {centerMode === 'assets' && (
-            <>
-              <span className="text-lg">{meta.emoji}</span>
-              <p className="text-sm font-semibold text-white truncate flex-1 min-w-0">{selectedLayer?.labelEs ?? '—'}</p>
-              <p className="text-[10px] shrink-0" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                {layerAssets.length} assets
-              </p>
-              <label
-                className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl cursor-pointer transition-all shrink-0"
-                style={{ background: 'rgba(139,92,246,0.9)', color: 'white' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,237,1)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(139,92,246,0.9)')}
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                </svg>
-                Subir
-                <input
-                  ref={fileRef}
-                  type="file"
-                  multiple
-                  accept=".svg,.png,.jpg,.jpeg"
-                  className="hidden"
-                  onChange={e => handleUpload(e.target.files)}
-                />
-              </label>
-            </>
+            <label
+              className="flex items-center self-center mr-4 gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl cursor-pointer transition-all shrink-0"
+              style={{ background: 'rgba(139,92,246,0.9)', color: 'white' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,237,1)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(139,92,246,0.9)')}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+              Subir
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                accept=".svg,.png,.jpg,.jpeg"
+                className="hidden"
+                onChange={e => handleUpload(e.target.files)}
+              />
+            </label>
           )}
         </div>
 
@@ -485,13 +506,13 @@ export default function Studio({ collections, layers: initialLayers, assets, key
       {/* ══════════════════════════════════════════════════
           RIGHT — Live preview
       ══════════════════════════════════════════════════ */}
-      <aside className="w-[268px] flex flex-col border-l shrink-0" style={{ borderColor: 'rgba(255,255,255,0.05)', background: '#0b0b16' }}>
+      <aside className="w-[260px] flex flex-col border-l shrink-0" style={{ borderColor: 'rgba(255,255,255,0.05)', background: '#0b0b16' }}>
 
-        {/* Canvas */}
-        <div className="flex-1 flex items-center justify-center p-5">
+        {/* Canvas — fixed, not floating */}
+        <div className="p-4 pb-3 shrink-0">
           <div
-            className="w-full aspect-square rounded-[28px] overflow-hidden"
-            style={{ background: 'rgba(255,255,255,0.03)', boxShadow: '0 32px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)' }}
+            className="w-full aspect-square rounded-[24px] overflow-hidden"
+            style={{ background: 'rgba(255,255,255,0.03)', boxShadow: '0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)' }}
           >
             <AvatarCanvas
               state={avatarState}
@@ -502,8 +523,8 @@ export default function Studio({ collections, layers: initialLayers, assets, key
         </div>
 
         {/* Controls */}
-        <div className="p-4 pt-0 space-y-4">
-          <div className="border-t pt-4 space-y-4" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
+          <div className="border-t pt-4 space-y-4" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
 
             {/* Skin */}
             <div>
@@ -546,7 +567,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
             </div>
 
             {/* Action buttons */}
-            <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={randomize}
                 className="text-xs rounded-xl py-2 transition-all font-medium"
