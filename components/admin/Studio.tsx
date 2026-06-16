@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import type { Layer, Asset, Collection, AvatarState, Keyword } from '@/types'
 import AssetInspector from '@/components/admin/AssetInspector'
+import BatchUploader  from '@/components/admin/BatchUploader'
 
 const AvatarCanvas = dynamic(() => import('@/components/builder/AvatarCanvas'), { ssr: false })
 
@@ -67,6 +68,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [uploadLog, setUploadLog]       = useState<string[]>([])
   const [seeding, setSeeding]           = useState(false)
   const [inspecting, setInspecting]     = useState<Asset | null>(null)
+  const [centerMode, setCenterMode]     = useState<'assets' | 'batch'>('assets')
 
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -288,44 +290,68 @@ export default function Studio({ collections, layers: initialLayers, assets, key
       </aside>
 
       {/* ══════════════════════════════════════════════════
-          CENTER — Asset picker
+          CENTER — Asset picker / Batch upload
       ══════════════════════════════════════════════════ */}
       <section className="flex-1 flex flex-col overflow-hidden">
 
         {/* Header bar */}
-        <div className="flex items-center gap-3 px-5 h-12 border-b shrink-0" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-          <span className="text-lg">{meta.emoji}</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-white truncate">{selectedLayer?.labelEs ?? '—'}</p>
+        <div className="flex items-center gap-2 px-4 h-12 border-b shrink-0" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+          {/* Mode toggle */}
+          <div className="flex items-center rounded-xl p-0.5 shrink-0" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <button
+              onClick={() => setCenterMode('assets')}
+              className="text-[11px] font-medium px-3 py-1 rounded-lg transition-all"
+              style={{
+                background: centerMode === 'assets' ? 'rgba(124,58,237,0.85)' : 'transparent',
+                color: centerMode === 'assets' ? 'white' : 'rgba(255,255,255,0.4)',
+              }}
+            >
+              Assets
+            </button>
+            <button
+              onClick={() => setCenterMode('batch')}
+              className="text-[11px] font-medium px-3 py-1 rounded-lg transition-all"
+              style={{
+                background: centerMode === 'batch' ? 'rgba(124,58,237,0.85)' : 'transparent',
+                color: centerMode === 'batch' ? 'white' : 'rgba(255,255,255,0.4)',
+              }}
+            >
+              ⬆ Lote
+            </button>
           </div>
-          <p className="text-[10px] mr-2 shrink-0" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            {layerAssets.length} assets
-          </p>
 
-          {/* Upload CTA */}
-          <label
-            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl cursor-pointer transition-all"
-            style={{ background: 'rgba(139,92,246,0.9)', color: 'white' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,237,1)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(139,92,246,0.9)')}
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-            </svg>
-            Subir
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              accept=".svg,.png,.jpg,.jpeg"
-              className="hidden"
-              onChange={e => handleUpload(e.target.files)}
-            />
-          </label>
+          {centerMode === 'assets' && (
+            <>
+              <span className="text-lg">{meta.emoji}</span>
+              <p className="text-sm font-semibold text-white truncate flex-1 min-w-0">{selectedLayer?.labelEs ?? '—'}</p>
+              <p className="text-[10px] shrink-0" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                {layerAssets.length} assets
+              </p>
+              <label
+                className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl cursor-pointer transition-all shrink-0"
+                style={{ background: 'rgba(139,92,246,0.9)', color: 'white' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,237,1)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(139,92,246,0.9)')}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
+                Subir
+                <input
+                  ref={fileRef}
+                  type="file"
+                  multiple
+                  accept=".svg,.png,.jpg,.jpeg"
+                  className="hidden"
+                  onChange={e => handleUpload(e.target.files)}
+                />
+              </label>
+            </>
+          )}
         </div>
 
-        {/* Upload log */}
-        {uploadLog.length > 0 && (
+        {/* Upload log (single-layer mode) */}
+        {centerMode === 'assets' && uploadLog.length > 0 && (
           <div className="mx-4 mt-3 rounded-xl p-3 space-y-0.5 shrink-0" style={{ background: 'rgba(255,255,255,0.04)' }}>
             {uploadLog.map((line, i) => (
               <p key={i} className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>{line}</p>
@@ -333,8 +359,18 @@ export default function Studio({ collections, layers: initialLayers, assets, key
           </div>
         )}
 
+        {/* Batch uploader */}
+        {centerMode === 'batch' && (
+          <BatchUploader
+            collections={collections}
+            layers={collLayers}
+            keywords={keywords}
+            onDone={() => window.location.reload()}
+          />
+        )}
+
         {/* Grid */}
-        <div className="flex-1 overflow-y-auto p-4">
+        {centerMode === 'assets' && <div className="flex-1 overflow-y-auto p-4">
           {layerAssets.length === 0 ? (
             <label className="flex flex-col items-center justify-center h-full rounded-2xl cursor-pointer transition-all group" style={{ border: '2px dashed rgba(255,255,255,0.08)' }}
               onMouseEnter={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = 'rgba(139,92,246,0.4)'; (e.currentTarget as HTMLLabelElement).style.background = 'rgba(139,92,246,0.04)' }}
@@ -443,7 +479,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
               })}
             </div>
           )}
-        </div>
+        </div>}
       </section>
 
       {/* ══════════════════════════════════════════════════
