@@ -69,6 +69,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [seeding, setSeeding]           = useState(false)
   const [inspecting, setInspecting]     = useState<Asset | null>(null)
   const [centerMode, setCenterMode]     = useState<'assets' | 'batch'>('assets')
+  const [dropOver, setDropOver]         = useState(false)
 
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -177,6 +178,27 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     if (!confirm('¿Eliminar este asset?')) return
     await fetch(`/api/assets?id=${assetId}`, { method: 'DELETE' })
     window.location.reload()
+  }
+
+  // ── File drag-and-drop (center panel) ────────────────
+  function onFileDragOver(e: React.DragEvent) {
+    if (centerMode !== 'assets') return
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault()
+      setDropOver(true)
+    }
+  }
+
+  function onFileDragLeave(e: React.DragEvent) {
+    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+      setDropOver(false)
+    }
+  }
+
+  function onFileDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDropOver(false)
+    if (centerMode === 'assets') handleUpload(e.dataTransfer.files)
   }
 
   // ── Render ────────────────────────────────────────────
@@ -301,7 +323,12 @@ export default function Studio({ collections, layers: initialLayers, assets, key
       {/* ══════════════════════════════════════════════════
           CENTER — Asset picker / Batch upload
       ══════════════════════════════════════════════════ */}
-      <section className="flex-1 flex flex-col overflow-hidden">
+      <section
+        className="flex-1 flex flex-col overflow-hidden relative"
+        onDragOver={onFileDragOver}
+        onDragLeave={onFileDragLeave}
+        onDrop={onFileDrop}
+      >
 
         {/* Tab bar */}
         <div className="flex items-stretch shrink-0 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#0c0c18', height: 46 }}>
@@ -388,6 +415,22 @@ export default function Studio({ collections, layers: initialLayers, assets, key
             keywords={keywords}
             onDone={() => window.location.reload()}
           />
+        )}
+
+        {/* Drop overlay */}
+        {dropOver && (
+          <div
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 pointer-events-none"
+            style={{ background: 'rgba(124,58,237,0.12)', border: '2px dashed rgba(124,58,237,0.5)', margin: 8, borderRadius: 20 }}
+          >
+            <svg className="w-10 h-10" style={{ color: '#a78bfa' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+            <p className="text-sm font-semibold" style={{ color: '#c4b5fd' }}>
+              Suelta para subir a <span style={{ color: 'white' }}>{selectedLayer?.labelEs ?? 'esta capa'}</span>
+            </p>
+            <p className="text-xs" style={{ color: 'rgba(196,181,253,0.5)' }}>SVG · PNG · JPG</p>
+          </div>
         )}
 
         {/* Grid */}
