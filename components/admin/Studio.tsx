@@ -546,6 +546,22 @@ export default function Studio({ collections, layers: initialLayers, assets, key
               })}
             </div>
           )}
+
+          {/* Subtle upload hint below the grid */}
+          {layerAssets.length > 0 && (
+            <label
+              className="flex items-center justify-center gap-2 mt-2 mb-4 py-3 rounded-2xl cursor-pointer transition-all"
+              style={{ border: '1.5px dashed rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.14)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = 'rgba(124,58,237,0.3)'; (e.currentTarget as HTMLLabelElement).style.color = 'rgba(196,181,253,0.4)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLLabelElement).style.color = 'rgba(255,255,255,0.14)' }}
+            >
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span className="text-xs font-medium">Arrastra archivos o haz clic para subir más</span>
+              <input type="file" multiple accept=".svg,.png,.jpg,.jpeg" className="hidden" onChange={e => handleUpload(e.target.files)} />
+            </label>
+          )}
         </div>}
       </section>
 
