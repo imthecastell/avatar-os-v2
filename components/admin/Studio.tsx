@@ -403,7 +403,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
               <input type="file" multiple accept=".svg,.png,.jpg,.jpeg" className="hidden" onChange={e => handleUpload(e.target.files)} />
             </label>
           ) : (
-            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))' }}>
+            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
 
               {/* None / deselect */}
               <button
@@ -435,7 +435,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                         <Image
                           src={asset.cdnUrl}
                           alt={asset.name}
-                          width={120} height={120}
+                          width={160} height={160}
                           className="w-full h-full object-cover"
                           unoptimized
                         />
@@ -469,6 +469,9 @@ export default function Studio({ collections, layers: initialLayers, assets, key
 
                     {/* Hover overlay */}
                     <div className="absolute inset-0 rounded-2xl flex flex-col items-stretch justify-end p-1.5 gap-1 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: 'rgba(0,0,0,0.75)' }}>
+                      <p className="text-[9px] font-medium text-center truncate px-1 pb-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                        {asset.name}
+                      </p>
                       <button
                         onClick={e => { e.stopPropagation(); setInspecting(asset) }}
                         className="text-[9px] font-medium rounded-lg py-1 transition-colors text-white"
@@ -508,11 +511,23 @@ export default function Studio({ collections, layers: initialLayers, assets, key
       ══════════════════════════════════════════════════ */}
       <aside className="w-[260px] flex flex-col border-l shrink-0" style={{ borderColor: 'rgba(255,255,255,0.05)', background: '#0b0b16' }}>
 
-        {/* Canvas — fixed, not floating */}
-        <div className="p-4 pb-3 shrink-0">
+        {/* Canvas preview */}
+        <div className="px-3 pt-3 pb-2 shrink-0">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <p className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.22)' }}>
+              Vista previa
+            </p>
+            <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>
+              {collLayers.filter(l => avatarState.selectedAssets[l.layerKey]).length}/{collLayers.length} capas
+            </p>
+          </div>
           <div
-            className="w-full aspect-square rounded-[24px] overflow-hidden"
-            style={{ background: 'rgba(255,255,255,0.03)', boxShadow: '0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)' }}
+            className="w-full aspect-square rounded-[20px] overflow-hidden"
+            style={{
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.06)',
+            }}
           >
             <AvatarCanvas
               state={avatarState}
