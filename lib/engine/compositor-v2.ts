@@ -25,15 +25,17 @@ export class CompositorV2 {
   private canvas!: HTMLCanvasElement
   private ctx!:    CanvasRenderingContext2D
   private size = 1024
-  // Cache raw SVG text per URL — invalidated only on clearCache()
+  // Raw SVG text cache — keyed by URL
   private svgCache = new Map<string, string>()
+  // Bounding-box viewBox cache — keyed by "url::groupId"
+  private viewBoxCache = new Map<string, string>()
 
   init(canvas: HTMLCanvasElement, size = 1024) {
-    this.canvas        = canvas
-    this.size          = size
-    canvas.width       = size
-    canvas.height      = size
-    this.ctx           = canvas.getContext('2d')!
+    this.canvas  = canvas
+    this.size    = size
+    canvas.width = size
+    canvas.height = size
+    this.ctx     = canvas.getContext('2d')!
   }
 
   async render(req: RenderRequest): Promise<void> {
@@ -51,9 +53,9 @@ export class CompositorV2 {
   private async drawLayer(layer: LayerConfig, req: RenderRequest): Promise<void> {
     let svg = await this.fetchSVG(layer.file)
 
-    // Hide non-active variant groups
+    // Select variant: hide siblings and zoom viewBox to the active group
     if (layer.group && layer.variants && layer.variants.length > 1) {
-      svg = this.setActiveGroup(svg, layer.group, layer.variants)
+      svg = await this.activateGroup(svg, layer.file, layer.group, layer.variants)
     }
 
     // Replace color tokens
@@ -65,7 +67,6 @@ export class CompositorV2 {
     const scaleX = layer.scaleX ?? 1.0
     this.ctx.save()
     if (scaleX !== 1.0) {
-      // Scale horizontally around center
       this.ctx.translate(this.size / 2, 0)
       this.ctx.scale(scaleX, 1)
       this.ctx.translate(-this.size / 2, 0)
@@ -75,15 +76,72 @@ export class CompositorV2 {
     bitmap.close()
   }
 
-  // Add style="display:none" to all variant groups except the active one.
-  // Works by matching the id attribute — safe as long as variant IDs are unique.
-  private setActiveGroup(svg: string, activeId: string, variants: string[]): string {
+  /**
+   * Hide all non-active variant groups in the SVG text, then rewrite the
+   * viewBox so the active group fills the entire canvas (auto-scale).
+   * The bounding-box lookup is cached after the first call per (file, group).
+   */
+  private async activateGroup(
+    svg: string,
+    file: string,
+    activeId: string,
+    variants: string[],
+  ): Promise<string> {
+    // 1 — hide siblings
     let result = svg
     for (const v of variants) {
       if (v === activeId) continue
       result = result.replaceAll(`id="${v}"`, `id="${v}" style="display:none"`)
     }
+
+    // 2 — get (and cache) the viewBox for this group
+    const cacheKey = `${file}::${activeId}`
+    let vb = this.viewBoxCache.get(cacheKey)
+    if (!vb) {
+      vb = await this.computeGroupViewBox(result, activeId) ?? undefined
+      if (vb) this.viewBoxCache.set(cacheKey, vb)
+    }
+
+    // 3 — rewrite the SVG's viewBox so this group fills the canvas
+    if (vb) {
+      result = result.replace(/viewBox="[^"]*"/, `viewBox="${vb}"`)
+    }
+
     return result
+  }
+
+  /**
+   * Inject the SVG into a hidden DOM node, call getBBox() on the target group,
+   * and return a viewBox string with a small padding margin.
+   */
+  private computeGroupViewBox(svgText: string, groupId: string): Promise<string | null> {
+    return new Promise(resolve => {
+      const container = document.createElement('div')
+      container.style.cssText =
+        'position:fixed;left:-9999px;top:-9999px;' +
+        'width:2001px;height:2000px;visibility:hidden;pointer-events:none'
+      container.innerHTML = svgText
+      document.body.appendChild(container)
+
+      // One tick so the browser lays out the SVG before calling getBBox
+      setTimeout(() => {
+        try {
+          const group = container.querySelector(`#${groupId}`) as SVGGraphicsElement | null
+          if (!group) { resolve(null); return }
+
+          const b = group.getBBox()
+          if (b.width === 0 || b.height === 0) { resolve(null); return }
+
+          // Add padding proportional to the bounding box
+          const pad = Math.max(b.width, b.height) * 0.04
+          resolve(`${b.x - pad} ${b.y - pad} ${b.width + pad * 2} ${b.height + pad * 2}`)
+        } catch {
+          resolve(null)
+        } finally {
+          document.body.removeChild(container)
+        }
+      }, 0)
+    })
   }
 
   private recolor(svg: string, ref: string, hex: string): string {
@@ -122,5 +180,6 @@ export class CompositorV2 {
 
   clearCache(): void {
     this.svgCache.clear()
+    this.viewBoxCache.clear()
   }
 }
