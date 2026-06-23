@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+
+# Large binary assets — serve from CDN/Supabase Storage, not git
+public/avatars/window.svg
+public/avatars/v2-template.svg
+public/avatars/bg\ -\ *.png
+public/avatars/bg*.png
