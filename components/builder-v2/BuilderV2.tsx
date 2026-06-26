@@ -1,7 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { CompositorV2, type LayerConfig } from '@/lib/engine/compositor-v2'
+import {
+  getBlobUrl, getPreviewUrls, isLayerLoaded, loadedLayerKeys, LAYER_CATALOG,
+} from '@/lib/svg/upload-store'
 import FinalComposer from './FinalComposer'
 
 // ── Palettes ──────────────────────────────────────────────────────────────────
@@ -27,7 +31,6 @@ const CLOTHES_LABELS: Record<string, string> = {
   Camiseta: 'T-Shirt A', Camiseta1: 'T-Shirt B',
   'Jacket-B': 'Jacket B', 'jacket-limited': 'Limited', 'Jacket-Open': 'Open',
 }
-
 const EMOTION_IDS = ['A', 'B', 'C', 'D', 'E', 'F']
 const EMOTION_LABELS: Record<string, string> = {
   A: 'Feliz', B: 'Neutral', C: 'Sorpresa', D: 'Triste', E: 'Enojado', F: 'Cool',
@@ -40,14 +43,10 @@ function pick<T>(arr: readonly T[]): T {
 // ── State + history ───────────────────────────────────────────────────────────
 
 interface AvatarState {
-  skinColor:      string
-  hairColor:      string
-  faceVariant:    string
-  faceWidth:      number
-  hairStyle:      HairStyle
-  clothesVariant: string
-  emotion:        string
-  showMask:       boolean
+  skinColor: string; hairColor: string
+  faceVariant: string; faceWidth: number
+  hairStyle: HairStyle; clothesVariant: string
+  emotion: string; showMask: boolean
 }
 
 const DEFAULT: AvatarState = {
@@ -69,9 +68,7 @@ function randomState(): AvatarState {
 
 type Action =
   | { type: 'SET'; key: keyof AvatarState; value: AvatarState[keyof AvatarState] }
-  | { type: 'RANDOM' }
-  | { type: 'UNDO' }
-  | { type: 'REDO' }
+  | { type: 'RANDOM' } | { type: 'UNDO' } | { type: 'REDO' }
 
 interface History { past: AvatarState[]; present: AvatarState; future: AvatarState[] }
 
@@ -90,16 +87,29 @@ function reducer(h: History, a: Action): History {
   }
 }
 
-// ── Layer builder ─────────────────────────────────────────────────────────────
+// ── Layer builder — hybrid: blob URL si está cargado, server file si no ───────
 
 function buildLayers(s: AvatarState): LayerConfig[] {
+  const hairFrontId = HAIR_FRONT_ID[s.hairStyle]
+  const hairBackId  = `BH-${s.hairStyle}`
+
+  function resolve(
+    layerKey: string, serverFile: string,
+    groupId: string, allGroupIds: string[],
+    extras: Partial<LayerConfig>,
+  ): LayerConfig {
+    const blob = getBlobUrl(layerKey, groupId)
+    if (blob) return { file: blob, ...extras } as LayerConfig
+    return { file: serverFile, variants: allGroupIds, group: groupId, ...extras } as LayerConfig
+  }
+
   return [
-    { file: '/avatars/hair-back.svg',  variants: HAIR_BACK_IDS,  group: `BH-${s.hairStyle}`,          colorKey: 'hair', order: 1 },
-    { file: '/avatars/body.svg',                                                                         colorKey: 'skin', order: 2 },
-    { file: '/avatars/clothes.svg',    variants: CLOTHES_IDS,     group: s.clothesVariant,                               order: 3 },
-    { file: '/avatars/head.svg',       variants: FACE_IDS,        group: s.faceVariant, scaleX: s.faceWidth, colorKey: 'skin', order: 4 },
-    { file: '/avatars/emotion.svg',    variants: EMOTION_IDS,     group: s.emotion,                                       order: 5 },
-    { file: '/avatars/hair-front.svg', variants: HAIR_FRONT_IDS, group: HAIR_FRONT_ID[s.hairStyle],   colorKey: 'hair', order: 6 },
+    resolve('hair-back',  '/avatars/hair-back.svg',  hairBackId,    HAIR_BACK_IDS,  { colorKey: 'hair', order: 1 }),
+    { file: '/avatars/body.svg', colorKey: 'skin', order: 2 },
+    resolve('clothes',    '/avatars/clothes.svg',     s.clothesVariant, CLOTHES_IDS, { order: 3 }),
+    resolve('head',       '/avatars/head.svg',        s.faceVariant, FACE_IDS,       { colorKey: 'skin', scaleX: s.faceWidth, order: 4 }),
+    resolve('emotion',    '/avatars/emotion.svg',     s.emotion,     EMOTION_IDS,    { order: 5 }),
+    resolve('hair-front', '/avatars/hair-front.svg',  hairFrontId,   HAIR_FRONT_IDS, { colorKey: 'hair', order: 6 }),
     ...(s.showMask ? [{ file: '/avatars/mask.svg', order: 7 } as LayerConfig] : []),
   ]
 }
@@ -107,7 +117,7 @@ function buildLayers(s: AvatarState): LayerConfig[] {
 // ── Thumbnail hook ────────────────────────────────────────────────────────────
 
 function useBatchThumbnails(
-  file: string,
+  file: string,   // '' = skip (usar previews del store)
   groups: string[],
   colorKey: 'skin' | 'hair' | null,
   skinColor: string,
@@ -117,6 +127,7 @@ function useBatchThumbnails(
   const depKey = colorKey === 'skin' ? skinColor : colorKey === 'hair' ? hairColor : '__static__'
 
   useEffect(() => {
+    if (!file) return   // sin archivo = está cubierto por el store
     let cancelled = false
     setUrls({})
     ;(async () => {
@@ -127,11 +138,10 @@ function useBatchThumbnails(
         comp.init(canvas, 80)
         await comp.render({
           layers: [{ file, variants: groups, group: g, colorKey: colorKey ?? undefined, order: 1 }],
-          skinColor,
-          hairColor,
+          skinColor, hairColor,
         })
-        const dataUrl = comp.exportPNG()
-        if (!cancelled) setUrls(prev => ({ ...prev, [g]: dataUrl }))
+        const url = comp.exportPNG()
+        if (!cancelled) setUrls(prev => ({ ...prev, [g]: url }))
       }
     })()
     return () => { cancelled = true }
@@ -141,16 +151,12 @@ function useBatchThumbnails(
   return urls
 }
 
-// ── UI primitives ─────────────────────────────────────────────────────────────
+// ── UI components ─────────────────────────────────────────────────────────────
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ padding: '14px 16px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-      <p style={{
-        fontSize: 9, fontWeight: 700, letterSpacing: '0.13em',
-        textTransform: 'uppercase', color: 'rgba(255,255,255,0.22)',
-        margin: '0 0 10px',
-      }}>
+      <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.22)', margin: '0 0 10px' }}>
         {title}
       </p>
       {children}
@@ -162,25 +168,19 @@ function Swatches({ colors, active, onPick }: { colors: string[]; active: string
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
       {colors.map(c => (
-        <button
-          key={c}
-          onClick={() => onPick(c)}
-          style={{
-            width: 22, height: 22, borderRadius: '50%', background: c,
-            border: active === c ? '2.5px solid white' : '2px solid rgba(255,255,255,0.08)',
-            boxShadow: active === c ? '0 0 0 2px rgba(255,255,255,0.25)' : 'none',
-            transform: active === c ? 'scale(1.15)' : 'scale(1)',
-            cursor: 'pointer', transition: 'transform 0.1s, box-shadow 0.1s',
-          }}
-        />
+        <button key={c} onClick={() => onPick(c)} style={{
+          width: 22, height: 22, borderRadius: '50%', background: c,
+          border: active === c ? '2.5px solid white' : '2px solid rgba(255,255,255,0.08)',
+          boxShadow: active === c ? '0 0 0 2px rgba(255,255,255,0.25)' : 'none',
+          transform: active === c ? 'scale(1.15)' : 'scale(1)',
+          cursor: 'pointer', transition: 'transform 0.1s, box-shadow 0.1s',
+        }} />
       ))}
     </div>
   )
 }
 
-function ThumbGrid({
-  ids, labels, thumbs, active, onSelect, cols = 4,
-}: {
+function ThumbGrid({ ids, labels, thumbs, active, onSelect, cols = 4 }: {
   ids: readonly string[]
   labels?: Record<string, string>
   thumbs: Record<string, string>
@@ -193,23 +193,15 @@ function ThumbGrid({
       {ids.map(id => {
         const on = active === id
         return (
-          <button
-            key={id}
-            onClick={() => onSelect(id)}
-            title={labels?.[id] ?? id}
-            style={{
-              aspectRatio: '1', borderRadius: 9, padding: 0, overflow: 'hidden',
-              border: `2px solid ${on ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.07)'}`,
-              background: on ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)',
-              cursor: 'pointer', transition: 'border-color 0.1s, background 0.1s',
-            }}
-          >
+          <button key={id} onClick={() => onSelect(id)} title={labels?.[id] ?? id} style={{
+            aspectRatio: '1', borderRadius: 9, padding: 0, overflow: 'hidden',
+            border: `2px solid ${on ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.07)'}`,
+            background: on ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)',
+            cursor: 'pointer', transition: 'border-color 0.1s',
+          }}>
             {thumbs[id] ? (
-              <img
-                src={thumbs[id]}
-                alt={labels?.[id] ?? id}
-                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-              />
+              <img src={thumbs[id]} alt={labels?.[id] ?? id}
+                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(255,255,255,0.07)' }} />
@@ -222,36 +214,22 @@ function ThumbGrid({
   )
 }
 
-function Btn({
-  onClick, disabled, primary, title, children,
-}: {
-  onClick: () => void
-  disabled?: boolean
-  primary?: boolean
-  title?: string
-  children: React.ReactNode
+function Btn({ onClick, disabled, primary, title, children }: {
+  onClick: () => void; disabled?: boolean; primary?: boolean; title?: string; children: React.ReactNode
 }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      style={primary ? {
-        padding: '10px 20px', borderRadius: 10, border: 'none',
-        background: disabled ? 'rgba(255,255,255,0.2)' : 'white',
-        color: '#0d0d0f', fontSize: 13, fontWeight: 700,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        letterSpacing: '-0.01em', transition: 'opacity 0.1s',
-        opacity: disabled ? 0.5 : 1,
-      } : {
-        padding: '10px 14px', borderRadius: 10,
-        border: '1px solid rgba(255,255,255,0.1)',
-        background: 'rgba(255,255,255,0.04)',
-        color: disabled ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.65)',
-        fontSize: 13, cursor: disabled ? 'not-allowed' : 'pointer',
-        transition: 'all 0.1s',
-      }}
-    >
+    <button onClick={onClick} disabled={disabled} title={title} style={primary ? {
+      padding: '10px 20px', borderRadius: 10, border: 'none',
+      background: disabled ? 'rgba(255,255,255,0.2)' : 'white',
+      color: '#0d0d0f', fontSize: 13, fontWeight: 700,
+      cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
+    } : {
+      padding: '10px 14px', borderRadius: 10,
+      border: '1px solid rgba(255,255,255,0.1)',
+      background: 'rgba(255,255,255,0.04)',
+      color: disabled ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.65)',
+      fontSize: 13, cursor: disabled ? 'not-allowed' : 'pointer',
+    }}>
       {children}
     </button>
   )
@@ -260,14 +238,18 @@ function Btn({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function BuilderV2() {
+  const router    = useRouter()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const compRef   = useRef<CompositorV2 | null>(null)
-  const [h, dispatch]            = useReducer(reducer, { past: [], present: DEFAULT, future: [] })
-  const state                    = h.present
-  const [rendering, setRendering]         = useState(false)
+  const [h, dispatch]  = useReducer(reducer, { past: [], present: DEFAULT, future: [] })
+  const state          = h.present
+  const [rendering, setRendering]               = useState(false)
   const [avatarForComposer, setAvatarForComposer] = useState<string | null>(null)
 
-  // ── Compositor ─────────────────────────────────────────────────────────────
+  // Read loaded layers once on mount (module-level store is synchronous)
+  const loadedLayers = loadedLayerKeys()
+
+  // ── Compositor ────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!canvasRef.current) return
@@ -285,21 +267,28 @@ export default function BuilderV2() {
       .finally(() => setRendering(false))
   }, [state])
 
-  // ── Thumbnails ─────────────────────────────────────────────────────────────
+  // ── Thumbnails — uploaded previews take priority, batch-render as fallback ──
 
-  const faceThumbs    = useBatchThumbnails('/avatars/head.svg',        FACE_IDS,       'skin', state.skinColor, state.hairColor)
-  const hairFThumbs   = useBatchThumbnails('/avatars/hair-front.svg',  HAIR_FRONT_IDS, 'hair', state.skinColor, state.hairColor)
-  const clothesThumbs = useBatchThumbnails('/avatars/clothes.svg',     CLOTHES_IDS,    null,   state.skinColor, state.hairColor)
-  const emotionThumbs = useBatchThumbnails('/avatars/emotion.svg',     EMOTION_IDS,    null,   state.skinColor, state.hairColor)
+  // When a layer is loaded from the store, its previewUrls are already 120px renders.
+  // Pass '' as file to useBatchThumbnails so it skips and returns {}.
+  const batchFaceThumbs    = useBatchThumbnails(isLayerLoaded('head')       ? '' : '/avatars/head.svg',       FACE_IDS,       'skin', state.skinColor, state.hairColor)
+  const batchHairFThumbs   = useBatchThumbnails(isLayerLoaded('hair-front') ? '' : '/avatars/hair-front.svg', HAIR_FRONT_IDS, 'hair', state.skinColor, state.hairColor)
+  const batchClothesThumbs = useBatchThumbnails(isLayerLoaded('clothes')    ? '' : '/avatars/clothes.svg',    CLOTHES_IDS,    null,   state.skinColor, state.hairColor)
+  const batchEmotionThumbs = useBatchThumbnails(isLayerLoaded('emotion')    ? '' : '/avatars/emotion.svg',    EMOTION_IDS,    null,   state.skinColor, state.hairColor)
 
-  // Remap hair front thumbnails to be keyed by style letter (A–G)
+  const faceThumbs    = { ...batchFaceThumbs,    ...getPreviewUrls('head') }
+  const hairFThumbs   = { ...batchHairFThumbs,   ...getPreviewUrls('hair-front') }
+  const clothesThumbs = { ...batchClothesThumbs, ...getPreviewUrls('clothes') }
+  const emotionThumbs = { ...batchEmotionThumbs, ...getPreviewUrls('emotion') }
+
+  // Remap hair front thumbnails from groupId key to style letter key
   const hairStyleThumbs: Record<string, string> = {}
   HAIR_STYLES.forEach(s => {
     const v = hairFThumbs[HAIR_FRONT_ID[s]]
     if (v) hairStyleThumbs[s] = v
   })
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const set = useCallback(
     <K extends keyof AvatarState>(k: K, v: AvatarState[K]) =>
@@ -323,148 +312,158 @@ export default function BuilderV2() {
     return <FinalComposer avatarDataUrl={avatarForComposer} onBack={() => setAvatarForComposer(null)} />
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div style={{
       display: 'flex', height: '100dvh',
       background: '#0d0d0f', color: 'white',
-      fontFamily: '"Inter", system-ui, -apple-system, sans-serif',
-      overflow: 'hidden',
+      fontFamily: '"Inter", system-ui, sans-serif',
+      overflow: 'hidden', flexDirection: 'column',
     }}>
-      {/* ── Left sidebar ── */}
-      <div style={{
-        width: 280, flexShrink: 0, overflowY: 'auto',
-        background: '#111115',
-        borderRight: '1px solid rgba(255,255,255,0.05)',
-      }}>
-        {/* Logo / header */}
-        <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-0.02em' }}>Avatar Studio</span>
-        </div>
-
-        {/* Piel & Cara */}
-        <Section title="Piel & Cara">
-          <Swatches colors={SKIN_TONES} active={state.skinColor} onPick={c => set('skinColor', c)} />
-          <ThumbGrid ids={FACE_IDS} thumbs={faceThumbs} active={state.faceVariant} onSelect={id => set('faceVariant', id)} cols={3} />
-          <div style={{ marginTop: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.2)' }}>
-                Ancho cara
-              </span>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', fontVariantNumeric: 'tabular-nums' }}>
-                {state.faceWidth.toFixed(2)}×
-              </span>
-            </div>
-            <input
-              type="range" min={0.75} max={1.25} step={0.01}
-              value={state.faceWidth}
-              onChange={e => set('faceWidth', parseFloat(e.target.value))}
-              style={{ width: '100%', accentColor: 'rgba(255,255,255,0.55)', margin: 0 }}
-            />
-          </div>
-        </Section>
-
-        {/* Cabello */}
-        <Section title="Cabello">
-          <Swatches colors={HAIR_COLORS} active={state.hairColor} onPick={c => set('hairColor', c)} />
-          <ThumbGrid
-            ids={HAIR_STYLES}
-            thumbs={hairStyleThumbs}
-            active={state.hairStyle}
-            onSelect={id => set('hairStyle', id as HairStyle)}
-            cols={4}
-          />
-        </Section>
-
-        {/* Ropa */}
-        <Section title="Ropa">
-          <ThumbGrid
-            ids={CLOTHES_IDS} labels={CLOTHES_LABELS}
-            thumbs={clothesThumbs}
-            active={state.clothesVariant}
-            onSelect={id => set('clothesVariant', id)}
-            cols={3}
-          />
-        </Section>
-
-        {/* Expresión */}
-        <Section title="Expresión">
-          <ThumbGrid
-            ids={EMOTION_IDS} labels={EMOTION_LABELS}
-            thumbs={emotionThumbs}
-            active={state.emotion}
-            onSelect={id => set('emotion', id)}
-            cols={3}
-          />
-        </Section>
-
-        {/* Extras */}
-        <Section title="Extras">
-          <label style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            cursor: 'pointer', fontSize: 12, color: 'rgba(255,255,255,0.4)',
-          }}>
-            <input
-              type="checkbox" checked={state.showMask}
-              onChange={e => set('showMask', e.target.checked)}
-              style={{ accentColor: 'white', width: 14, height: 14 }}
-            />
-            Máscara
-          </label>
-        </Section>
-      </div>
-
-      {/* ── Center ── */}
-      <div style={{
-        flex: 1, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        padding: '40px 48px', gap: 28,
-      }}>
-        {/* Avatar preview — circular */}
+      {/* Custom assets banner */}
+      {loadedLayers.length > 0 && (
         <div style={{
-          position: 'relative',
-          width: 'min(420px, calc(100vh - 220px))',
-          aspectRatio: '1',
-          borderRadius: '50%',
-          overflow: 'hidden',
-          background: 'radial-gradient(ellipse at 35% 25%, rgba(90,60,140,0.18) 0%, #17171c 65%)',
-          boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 40px 100px rgba(0,0,0,0.85)',
           flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '7px 20px',
+          background: 'rgba(100,220,140,0.06)',
+          borderBottom: '1px solid rgba(100,220,140,0.12)',
         }}>
-          <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
-          {rendering && (
-            <div style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(0,0,0,0.2)',
-              fontSize: 9, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.2)',
-            }}>
-              RENDERIZANDO
+          <span style={{ fontSize: 11, color: 'rgba(100,220,140,0.7)' }}>
+            ⚡ Assets personalizados:{' '}
+            {loadedLayers.map(k => LAYER_CATALOG[k] ?? k).join(', ')}
+          </span>
+          <button
+            onClick={() => {
+              const locale = window.location.pathname.split('/')[1] || 'es'
+              router.push(`/${locale}/svg-processor`)
+            }}
+            style={{
+              fontSize: 11, background: 'transparent', border: 'none',
+              color: 'rgba(100,220,140,0.6)', cursor: 'pointer', padding: '2px 6px',
+            }}
+          >
+            + Cargar más capas
+          </button>
+        </div>
+      )}
+
+      {/* Main layout */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* ── Left sidebar ── */}
+        <div style={{
+          width: 280, flexShrink: 0, overflowY: 'auto',
+          background: '#111115', borderRight: '1px solid rgba(255,255,255,0.05)',
+        }}>
+          <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-0.02em' }}>Avatar Studio</span>
+          </div>
+
+          {/* Piel & Cara */}
+          <Section title="Piel & Cara">
+            <Swatches colors={SKIN_TONES} active={state.skinColor} onPick={c => set('skinColor', c)} />
+            <ThumbGrid ids={FACE_IDS} thumbs={faceThumbs} active={state.faceVariant}
+              onSelect={id => set('faceVariant', id)} cols={3} />
+            <div style={{ marginTop: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.2)' }}>Ancho cara</span>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', fontVariantNumeric: 'tabular-nums' }}>{state.faceWidth.toFixed(2)}×</span>
+              </div>
+              <input type="range" min={0.75} max={1.25} step={0.01}
+                value={state.faceWidth}
+                onChange={e => set('faceWidth', parseFloat(e.target.value))}
+                style={{ width: '100%', accentColor: 'rgba(255,255,255,0.55)', margin: 0 }}
+              />
             </div>
-          )}
+          </Section>
+
+          {/* Cabello */}
+          <Section title="Cabello">
+            <Swatches colors={HAIR_COLORS} active={state.hairColor} onPick={c => set('hairColor', c)} />
+            <ThumbGrid ids={HAIR_STYLES} thumbs={hairStyleThumbs} active={state.hairStyle}
+              onSelect={id => set('hairStyle', id as HairStyle)} cols={4} />
+          </Section>
+
+          {/* Ropa */}
+          <Section title="Ropa">
+            <ThumbGrid ids={CLOTHES_IDS} labels={CLOTHES_LABELS} thumbs={clothesThumbs}
+              active={state.clothesVariant} onSelect={id => set('clothesVariant', id)} cols={3} />
+          </Section>
+
+          {/* Expresión */}
+          <Section title="Expresión">
+            <ThumbGrid ids={EMOTION_IDS} labels={EMOTION_LABELS} thumbs={emotionThumbs}
+              active={state.emotion} onSelect={id => set('emotion', id)} cols={3} />
+          </Section>
+
+          {/* Extras */}
+          <Section title="Extras">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
+              <input type="checkbox" checked={state.showMask}
+                onChange={e => set('showMask', e.target.checked)}
+                style={{ accentColor: 'white', width: 14, height: 14 }}
+              />
+              Máscara
+            </label>
+
+            {/* Link to SVG processor */}
+            <button
+              onClick={() => {
+                const locale = window.location.pathname.split('/')[1] || 'es'
+                router.push(`/${locale}/svg-processor`)
+              }}
+              style={{
+                marginTop: 12, width: '100%', padding: '7px 0',
+                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'rgba(255,255,255,0.02)',
+                color: 'rgba(255,255,255,0.35)',
+                borderRadius: 8, fontSize: 11, cursor: 'pointer',
+              }}
+            >
+              ↑ Subir SVG personalizado
+            </button>
+          </Section>
         </div>
 
-        {/* Action bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Btn onClick={() => dispatch({ type: 'RANDOM' })} disabled={rendering}>
-            🎲 Aleatorio
-          </Btn>
-          <Btn onClick={() => dispatch({ type: 'UNDO' })} disabled={!h.past.length} title="Deshacer">
-            ↩
-          </Btn>
-          <Btn onClick={() => dispatch({ type: 'REDO' })} disabled={!h.future.length} title="Rehacer">
-            ↪
-          </Btn>
+        {/* ── Center ── */}
+        <div style={{
+          flex: 1, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          padding: '40px 48px', gap: 28, overflow: 'hidden',
+        }}>
+          {/* Avatar preview */}
+          <div style={{
+            position: 'relative',
+            width: 'min(420px, calc(100vh - 240px))',
+            aspectRatio: '1',
+            borderRadius: '50%', overflow: 'hidden',
+            background: 'radial-gradient(ellipse at 35% 25%, rgba(90,60,140,0.18) 0%, #17171c 65%)',
+            boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 40px 100px rgba(0,0,0,0.85)',
+            flexShrink: 0,
+          }}>
+            <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+            {rendering && (
+              <div style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(0,0,0,0.2)',
+                fontSize: 9, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.2)',
+              }}>
+                RENDERIZANDO
+              </div>
+            )}
+          </div>
 
-          <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)', margin: '0 2px' }} />
-
-          <Btn onClick={handleExport} disabled={rendering}>
-            ⬇ Descargar
-          </Btn>
-          <Btn onClick={handleGoToComposer} disabled={rendering} primary>
-            Marco final →
-          </Btn>
+          {/* Action bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Btn onClick={() => dispatch({ type: 'RANDOM' })} disabled={rendering}>🎲 Aleatorio</Btn>
+            <Btn onClick={() => dispatch({ type: 'UNDO' })} disabled={!h.past.length} title="Deshacer">↩</Btn>
+            <Btn onClick={() => dispatch({ type: 'REDO' })} disabled={!h.future.length} title="Rehacer">↪</Btn>
+            <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)', margin: '0 2px' }} />
+            <Btn onClick={handleExport} disabled={rendering}>⬇ Descargar</Btn>
+            <Btn onClick={handleGoToComposer} disabled={rendering} primary>Marco final →</Btn>
+          </div>
         </div>
       </div>
     </div>
