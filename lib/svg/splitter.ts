@@ -9,16 +9,35 @@ export interface SvgGroupInfo {
 
 // ── Group detection ───────────────────────────────────────────────────────────
 
-/** Encuentra todos los <g id="..."> de primer nivel dentro del SVG */
+/**
+ * Encuentra los grupos variante dentro del SVG.
+ * Busca el elemento (svg o cualquier <g>) que tenga el mayor número de
+ * hijos directos <g id="...">, para soportar estructuras anidadas de Affinity Designer.
+ */
 export function detectGroups(svgText: string): string[] {
   const parser = new DOMParser()
   const doc    = parser.parseFromString(svgText, 'image/svg+xml')
   if (doc.querySelector('parsererror')) return []
   const svgEl  = doc.querySelector('svg')
   if (!svgEl) return []
-  return Array.from(svgEl.children)
-    .filter((el): el is Element => el.tagName === 'g' && Boolean(el.id))
-    .map(el => el.id)
+
+  const idChildrenOf = (el: Element) =>
+    Array.from(el.children).filter(c => c.tagName === 'g' && Boolean(c.id))
+
+  // Empieza con svg como candidato
+  let bestParent: Element = svgEl
+  let bestCount           = idChildrenOf(svgEl).length
+
+  // Recorre TODOS los <g> del árbol buscando el que tiene más hijos con id
+  for (const g of Array.from(svgEl.querySelectorAll('g'))) {
+    const count = idChildrenOf(g).length
+    if (count > bestCount) {
+      bestCount  = count
+      bestParent = g
+    }
+  }
+
+  return idChildrenOf(bestParent).map(c => c.id)
 }
 
 // ── Group extraction ──────────────────────────────────────────────────────────
