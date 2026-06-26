@@ -1,88 +1,111 @@
 'use client'
 
-// ─── Module-level store ───────────────────────────────────────────────────────
-// Persiste durante la sesión (misma pestaña, cualquier página Next.js).
-// Se pierde al recargar — es el comportamiento esperado para este tipo de tool.
+// Persiste durante la sesión (misma pestaña). Se pierde al recargar.
 
 interface GroupEntry {
-  blobUrl:    string  // URL.createObjectURL — válido mientras la pestaña esté abierta
-  previewUrl: string  // canvas data URL 120px — para usar como thumbnail en el builder
+  blobUrl:    string   // URL.createObjectURL
+  previewUrl: string   // data URL 120px thumbnail
 }
 
-const store = new Map<string, Map<string, GroupEntry>>()
-
-// ─── Layer catalog ────────────────────────────────────────────────────────────
-
-export const LAYER_CATALOG: Record<string, string> = {
-  'hair-front': 'Cabello Frontal',
-  'hair-back':  'Cabello Trasero',
-  'head':       'Cara / Cabeza',
-  'clothes':    'Ropa',
-  'emotion':    'Expresión',
-  'body':       'Cuerpo',
-  'mask':       'Máscara',
+interface LayerEntry {
+  name:   string                     // nombre libre: "Cabeza", "Cabello Frontal", etc.
+  order:  number                     // z-order: menor = más atrás
+  groups: Map<string, GroupEntry>    // variantId → entry
 }
 
-/** Adivina la capa a partir del nombre del archivo */
-export function guessLayerKey(filename: string): string {
-  const f = filename.toLowerCase()
-  if ((f.includes('hair') || f.includes('cabello')) && (f.includes('front') || f.includes('frente'))) return 'hair-front'
-  if ((f.includes('hair') || f.includes('cabello')) && (f.includes('back')  || f.includes('detras') || f.includes('trasero'))) return 'hair-back'
-  if (f.includes('head') || f.includes('cara') || f.includes('face') || f.includes('cabeza')) return 'head'
-  if (f.includes('clothes') || f.includes('ropa') || f.includes('camiseta') || f.includes('jacket')) return 'clothes'
-  if (f.includes('emotion') || f.includes('emocion') || f.includes('expresion') || f.includes('mood')) return 'emotion'
-  if (f.includes('body') || f.includes('cuerpo')) return 'body'
-  if (f.includes('mask') || f.includes('mascara')) return 'mask'
-  return 'hair-front'
-}
+const store = new Map<string, LayerEntry>()   // layerKey → LayerEntry
 
 // ─── Write ────────────────────────────────────────────────────────────────────
 
 export function storeLayer(
   layerKey: string,
-  groups: Array<{ id: string; extractedSvg: string; previewUrl: string }>,
+  name:     string,
+  order:    number,
+  groups:   Array<{ id: string; extractedSvg: string; previewUrl: string }>,
 ): void {
-  // Revocar blob URLs anteriores de esta capa para no acumular memoria
   const prev = store.get(layerKey)
   if (prev) {
-    for (const e of prev.values()) URL.revokeObjectURL(e.blobUrl)
+    for (const e of prev.groups.values()) URL.revokeObjectURL(e.blobUrl)
   }
 
   const map = new Map<string, GroupEntry>()
   for (const g of groups) {
     const blob = new Blob([g.extractedSvg], { type: 'image/svg+xml' })
-    map.set(g.id, {
-      blobUrl:    URL.createObjectURL(blob),
-      previewUrl: g.previewUrl,
-    })
+    map.set(g.id, { blobUrl: URL.createObjectURL(blob), previewUrl: g.previewUrl })
   }
-  store.set(layerKey, map)
+  store.set(layerKey, { name, order, groups: map })
 }
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
-/** URL del SVG standalone para un grupo específico. null si no está cargado. */
-export function getBlobUrl(layerKey: string, groupId: string): string | null {
-  return store.get(layerKey)?.get(groupId)?.blobUrl ?? null
+export function getBlobUrl(layerKey: string, variantId: string): string | null {
+  return store.get(layerKey)?.groups.get(variantId)?.blobUrl ?? null
 }
 
-/** Mapa groupId → previewUrl para usar como thumbnails en el builder */
 export function getPreviewUrls(layerKey: string): Record<string, string> {
-  const map = store.get(layerKey)
-  if (!map) return {}
+  const entry = store.get(layerKey)
+  if (!entry) return {}
   const out: Record<string, string> = {}
-  for (const [id, e] of map) out[id] = e.previewUrl
+  for (const [id, e] of entry.groups) out[id] = e.previewUrl
   return out
 }
 
-/** ¿Tiene grupos cargados esta capa? */
-export function isLayerLoaded(layerKey: string): boolean {
-  return (store.get(layerKey)?.size ?? 0) > 0
+/** Devuelve todas las capas cargadas, ordenadas por order */
+export function getAllLayers(): Array<{
+  key:       string
+  name:      string
+  order:     number
+  variantIds: string[]
+}> {
+  return Array.from(store.entries())
+    .filter(([, e]) => e.groups.size > 0)
+    .map(([key, e]) => ({
+      key,
+      name:       e.name,
+      order:      e.order,
+      variantIds: Array.from(e.groups.keys()),
+    }))
+    .sort((a, b) => a.order - b.order)
 }
 
-/** Lista de claves de capas que tienen grupos cargados */
+export function isLayerLoaded(layerKey: string): boolean {
+  return (store.get(layerKey)?.groups.size ?? 0) > 0
+}
+
 export function loadedLayerKeys(): string[] {
   return Array.from(store.entries())
-    .filter(([, m]) => m.size > 0)
+    .filter(([, e]) => e.groups.size > 0)
     .map(([k]) => k)
+}
+
+/** Adivina el nombre de capa a partir del nombre del archivo */
+export function guessLayerName(filename: string): string {
+  const f = filename.toLowerCase().replace(/\.[^.]+$/, '')
+  if (f.includes('hair') && f.includes('front')) return 'Cabello Frontal'
+  if (f.includes('hair') && f.includes('back'))  return 'Cabello Trasero'
+  if (f.includes('hair'))                         return 'Cabello'
+  if (f.includes('head') || f.includes('face') || f.includes('cara')) return 'Cabeza'
+  if (f.includes('body') || f.includes('cuerpo')) return 'Cuerpo'
+  if (f.includes('clothes') || f.includes('ropa')) return 'Ropa'
+  if (f.includes('emotion') || f.includes('expresion')) return 'Expresión'
+  if (f.includes('mask') || f.includes('mascara')) return 'Máscara'
+  return filename.replace(/\.[^.]+$/, '')
+}
+
+/** Adivina el z-order a partir del nombre del archivo */
+export function guessLayerOrder(filename: string): number {
+  const f = filename.toLowerCase()
+  if (f.includes('hair') && f.includes('back'))  return 1
+  if (f.includes('body') || f.includes('cuerpo')) return 2
+  if (f.includes('clothes') || f.includes('ropa')) return 3
+  if (f.includes('head') || f.includes('face') || f.includes('cara')) return 4
+  if (f.includes('emotion') || f.includes('expresion')) return 5
+  if (f.includes('hair') && f.includes('front')) return 6
+  if (f.includes('mask') || f.includes('mascara')) return 7
+  return 5
+}
+
+/** Clave única para el store a partir del nombre de archivo */
+export function fileToKey(filename: string): string {
+  return filename.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/g, '-')
 }

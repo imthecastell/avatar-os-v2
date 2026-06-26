@@ -2,118 +2,149 @@
 
 export interface SvgGroupInfo {
   id:           string
-  extractedSvg: string   // standalone SVG con viewBox corregido
-  previewUrl:   string   // data URL para mostrar en la UI
+  extractedSvg: string
+  previewUrl:   string
   bbox:         { x: number; y: number; width: number; height: number }
 }
 
 // ── Group detection ───────────────────────────────────────────────────────────
 
 /**
- * Encuentra los grupos variante dentro del SVG.
- * Busca el elemento (svg o cualquier <g>) que tenga el mayor número de
- * hijos directos <g id="...">, para soportar estructuras anidadas de Affinity Designer.
+ * Busca el elemento con más hijos <g id="..."> directos.
+ * Soporta estructura anidada de Affinity Designer (grupos dentro de grupos).
  */
 export function detectGroups(svgText: string): string[] {
-  const parser = new DOMParser()
-  const doc    = parser.parseFromString(svgText, 'image/svg+xml')
+  const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml')
   if (doc.querySelector('parsererror')) return []
-  const svgEl  = doc.querySelector('svg')
+  const svgEl = doc.querySelector('svg')
   if (!svgEl) return []
 
   const idChildrenOf = (el: Element) =>
     Array.from(el.children).filter(c => c.tagName === 'g' && Boolean(c.id))
 
-  // Empieza con svg como candidato
-  let bestParent: Element = svgEl
-  let bestCount           = idChildrenOf(svgEl).length
+  let best = svgEl as Element
+  let bestCount = idChildrenOf(svgEl).length
 
-  // Recorre TODOS los <g> del árbol buscando el que tiene más hijos con id
   for (const g of Array.from(svgEl.querySelectorAll('g'))) {
-    const count = idChildrenOf(g).length
-    if (count > bestCount) {
-      bestCount  = count
-      bestParent = g
-    }
+    const n = idChildrenOf(g).length
+    if (n > bestCount) { bestCount = n; best = g }
   }
 
-  return idChildrenOf(bestParent).map(c => c.id)
+  return idChildrenOf(best).map(c => c.id)
 }
 
 // ── Group extraction ──────────────────────────────────────────────────────────
 
 /**
- * Extrae un grupo como SVG standalone con:
- *  - viewBox calculado via getBBox() (corrige la posición fuera de frame de Affinity)
- *  - <defs> del SVG original incluidos (preserva gradients / clip-paths)
- *  - preview data URL de 120px
+ * Extrae un grupo como SVG standalone con viewBox correcto.
+ *
+ * Estrategia:
+ *  1. Renderiza el SVG con un viewBox MUY amplio (para ver contenido off-canvas).
+ *  2. Usa getBoundingClientRect para obtener posición real en pantalla.
+ *  3. Convierte a coordenadas SVG — esto da el viewBox correcto.
+ *  4. Incluye los transforms de los ancestros en el SVG resultante para que
+ *     el contenido se renderice exactamente donde debe.
  */
 export function extractGroup(svgText: string, groupId: string): Promise<SvgGroupInfo | null> {
   return new Promise(resolve => {
-    // Contenedor oculto fuera de pantalla
+    const CONTAINER_PX = 5000
+    const VB_HALF      = 25000   // viewBox va de -25000 a 25000 en x e y
+
     const container = document.createElement('div')
     container.style.cssText =
-      'position:fixed;left:-9999px;top:-9999px;' +
-      'width:3000px;height:3000px;visibility:hidden;pointer-events:none'
+      `position:fixed;left:-${CONTAINER_PX + 2000}px;top:0;` +
+      `width:${CONTAINER_PX}px;height:${CONTAINER_PX}px;` +
+      `overflow:visible;visibility:hidden;pointer-events:none`
 
-    // Parsear el SVG como XML (preserva namespaces)
     const parser = new DOMParser()
     const doc    = parser.parseFromString(svgText, 'image/svg+xml')
     if (doc.querySelector('parsererror')) { resolve(null); return }
 
-    const importedSvg = document.importNode(doc.documentElement, true)
-    container.appendChild(importedSvg)
+    const svgEl = document.importNode(doc.documentElement, true)
+    svgEl.setAttribute('width',   `${CONTAINER_PX}`)
+    svgEl.setAttribute('height',  `${CONTAINER_PX}`)
+    svgEl.setAttribute('viewBox', `${-VB_HALF} ${-VB_HALF} ${VB_HALF * 2} ${VB_HALF * 2}`)
+    svgEl.style.overflow = 'visible'
+
+    container.appendChild(svgEl)
     document.body.appendChild(container)
 
-    // Dos frames para que el browser haga layout completo
     requestAnimationFrame(() => requestAnimationFrame(async () => {
+      const cleanup = () => {
+        if (document.body.contains(container)) document.body.removeChild(container)
+      }
+
       try {
         const liveSvg = container.querySelector('svg')!
-        // CSS.escape maneja IDs con caracteres especiales (guiones, etc.)
-        const group = liveSvg.querySelector(`[id="${CSS.escape(groupId)}"]`) as SVGGraphicsElement | null
+        const group   = liveSvg.querySelector(
+          `[id="${CSS.escape(groupId)}"]`
+        ) as SVGGraphicsElement | null
 
         if (!group) { cleanup(); resolve(null); return }
 
-        const b = group.getBBox()
-        if (b.width === 0 || b.height === 0) { cleanup(); resolve(null); return }
+        const svgRect = liveSvg.getBoundingClientRect()
+        const gRect   = group.getBoundingClientRect()
 
-        // Padding proporcional al tamaño del grupo
-        const pad = Math.max(b.width, b.height) * 0.05
-        const vb  = `${b.x - pad} ${b.y - pad} ${b.width + pad * 2} ${b.height + pad * 2}`
+        if (gRect.width < 2 || gRect.height < 2) { cleanup(); resolve(null); return }
 
-        const ns   = liveSvg.getAttribute('xmlns') || 'http://www.w3.org/2000/svg'
-        const defs = liveSvg.querySelector('defs')
+        // Convertir de píxeles de pantalla a coordenadas del espacio SVG viewport
+        const VB_TOTAL = VB_HALF * 2
+        const sx = VB_TOTAL / svgRect.width
+        const sy = VB_TOTAL / svgRect.height
 
-        const ser = new XMLSerializer()
-        // XMLSerializer añade xmlns a cada nodo — lo limpiamos en hijos
-        const defsStr  = defs  ? ser.serializeToString(defs).replace(/ xmlns="[^"]*"/g, '') : ''
-        const groupStr = ser.serializeToString(group).replace(/ xmlns="[^"]*"/g, '')
+        const x = (gRect.left - svgRect.left) * sx - VB_HALF
+        const y = (gRect.top  - svgRect.top)  * sy - VB_HALF
+        const w = gRect.width  * sx
+        const h = gRect.height * sy
 
-        const extractedSvg = `<svg xmlns="${ns}" viewBox="${vb}">${defsStr}${groupStr}</svg>`
+        // Capturar la cadena de transforms de los ancestros para que el contenido
+        // se renderice en las mismas coordenadas en el SVG standalone.
+        const ancestorTransforms: string[] = []
+        let el: Element | null = group.parentElement
+        while (el && el.tagName.toLowerCase() !== 'svg') {
+          const t = el.getAttribute('transform')
+          if (t) ancestorTransforms.unshift(t)
+          el = el.parentElement
+        }
 
         cleanup()
+
+        // Re-parsear el SVG original para serialización limpia
+        const origDoc   = new DOMParser().parseFromString(svgText, 'image/svg+xml')
+        const origSvg   = origDoc.querySelector('svg')!
+        const origGroup = origSvg.querySelector(`[id="${CSS.escape(groupId)}"]`)!
+        const defs      = origSvg.querySelector('defs')
+        const ns        = origSvg.getAttribute('xmlns') || 'http://www.w3.org/2000/svg'
+        const ser       = new XMLSerializer()
+
+        const defsStr  = defs
+          ? ser.serializeToString(defs).replace(/ xmlns="[^"]*"/g, '')
+          : ''
+        const groupStr = ser.serializeToString(origGroup).replace(/ xmlns="[^"]*"/g, '')
+
+        // Envolver en los transforms de los ancestros
+        const wrapOpen  = ancestorTransforms.map(t => `<g transform="${t}">`).join('')
+        const wrapClose = ancestorTransforms.map(() => '</g>').join('')
+
+        const pad = Math.max(w, h) * 0.05
+        const vb  = `${x - pad} ${y - pad} ${w + pad * 2} ${h + pad * 2}`
+
+        const extractedSvg =
+          `<svg xmlns="${ns}" viewBox="${vb}">${defsStr}${wrapOpen}${groupStr}${wrapClose}</svg>`
 
         const previewUrl = await renderSvgToDataUrl(extractedSvg, 120)
 
-        resolve({
-          id:           groupId,
-          extractedSvg,
-          previewUrl,
-          bbox: { x: b.x, y: b.y, width: b.width, height: b.height },
-        })
+        resolve({ id: groupId, extractedSvg, previewUrl, bbox: { x, y, width: w, height: h } })
+
       } catch {
         cleanup()
         resolve(null)
-      }
-
-      function cleanup() {
-        if (document.body.contains(container)) document.body.removeChild(container)
       }
     }))
   })
 }
 
-// ── Render preview ────────────────────────────────────────────────────────────
+// ── Preview render ────────────────────────────────────────────────────────────
 
 async function renderSvgToDataUrl(svgText: string, size: number): Promise<string> {
   const blob = new Blob([svgText], { type: 'image/svg+xml' })
@@ -147,7 +178,6 @@ export function downloadOne(info: SvgGroupInfo): void {
 }
 
 export async function downloadAll(infos: SvgGroupInfo[]): Promise<void> {
-  // Chrome / Edge: File System Access API → guardar en carpeta elegida por el usuario
   if ('showDirectoryPicker' in window) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -159,12 +189,8 @@ export async function downloadAll(infos: SvgGroupInfo[]): Promise<void> {
         await writable.close()
       }
       return
-    } catch {
-      // usuario canceló el picker → fallback
-    }
+    } catch { /* usuario canceló */ }
   }
-
-  // Fallback: descargas individuales secuenciales (300ms entre cada una)
   for (const g of infos) {
     downloadOne(g)
     await new Promise(r => setTimeout(r, 350))

@@ -1,83 +1,56 @@
 'use client'
 
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CompositorV2, type LayerConfig } from '@/lib/engine/compositor-v2'
-import {
-  getBlobUrl, getPreviewUrls, isLayerLoaded, loadedLayerKeys, LAYER_CATALOG,
-} from '@/lib/svg/upload-store'
-import FinalComposer from './FinalComposer'
+import { getAllLayers, getBlobUrl, getPreviewUrls } from '@/lib/svg/upload-store'
 
-// ── Palettes ──────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
 
-const SKIN_TONES  = ['#fddbb4', '#f9c7b6', '#e8a87c', '#c68642', '#8d5524', '#4a2912']
-const HAIR_COLORS = ['#f5e6c8', '#c9a84c', '#8b4513', '#3d2314', '#1a1a1a', '#b0b0b0', '#c0392b', '#6b3fa0']
-
-// ── Avatar data ───────────────────────────────────────────────────────────────
-
-const FACE_IDS = ['Face-A', 'Face-AA', 'Face-B', 'Face-BB', 'Face-C', 'Face-CC']
-
-const HAIR_STYLES = ['A', 'B', 'C', 'D', 'E', 'F', 'G'] as const
-type HairStyle = typeof HAIR_STYLES[number]
-
-const HAIR_FRONT_ID: Record<HairStyle, string> = {
-  A: 'HF-A', B: 'FH-B', C: 'HF-C', D: 'HF-D', E: 'HF-E', F: 'HF-F', G: 'HF-G',
-}
-const HAIR_BACK_IDS  = HAIR_STYLES.map(s => `BH-${s}`)
-const HAIR_FRONT_IDS = HAIR_STYLES.map(s => HAIR_FRONT_ID[s])
-
-const CLOTHES_IDS = ['Camiseta', 'Camiseta1', 'Jacket-B', 'jacket-limited', 'Jacket-Open']
-const CLOTHES_LABELS: Record<string, string> = {
-  Camiseta: 'T-Shirt A', Camiseta1: 'T-Shirt B',
-  'Jacket-B': 'Jacket B', 'jacket-limited': 'Limited', 'Jacket-Open': 'Open',
-}
-const EMOTION_IDS = ['A', 'B', 'C', 'D', 'E', 'F']
-const EMOTION_LABELS: Record<string, string> = {
-  A: 'Feliz', B: 'Neutral', C: 'Sorpresa', D: 'Triste', E: 'Enojado', F: 'Cool',
-}
-
-function pick<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]
-}
-
-// ── State + history ───────────────────────────────────────────────────────────
-
-interface AvatarState {
-  skinColor: string; hairColor: string
-  faceVariant: string; faceWidth: number
-  hairStyle: HairStyle; clothesVariant: string
-  emotion: string; showMask: boolean
-}
-
-const DEFAULT: AvatarState = {
-  skinColor: '#f9c7b6', hairColor: '#3d2314',
-  faceVariant: 'Face-A', faceWidth: 1.0,
-  hairStyle: 'A', clothesVariant: 'Camiseta',
-  emotion: 'A', showMask: false,
-}
-
-function randomState(): AvatarState {
-  return {
-    skinColor: pick(SKIN_TONES), hairColor: pick(HAIR_COLORS),
-    faceVariant: pick(FACE_IDS),
-    faceWidth: Math.round((0.8 + Math.random() * 0.4) * 100) / 100,
-    hairStyle: pick(HAIR_STYLES), clothesVariant: pick(CLOTHES_IDS),
-    emotion: pick(EMOTION_IDS), showMask: false,
-  }
+interface BuilderState {
+  // layerKey → selected variantId
+  selected: Record<string, string>
 }
 
 type Action =
-  | { type: 'SET'; key: keyof AvatarState; value: AvatarState[keyof AvatarState] }
-  | { type: 'RANDOM' } | { type: 'UNDO' } | { type: 'REDO' }
+  | { type: 'SET_VARIANT'; layerKey: string; variantId: string }
+  | { type: 'RANDOM'; layers: ReturnType<typeof getAllLayers> }
+  | { type: 'UNDO' }
+  | { type: 'REDO' }
 
-interface History { past: AvatarState[]; present: AvatarState; future: AvatarState[] }
+interface History {
+  past:    BuilderState[]
+  present: BuilderState
+  future:  BuilderState[]
+}
+
+function defaultSelected(layers: ReturnType<typeof getAllLayers>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const l of layers) {
+    if (l.variantIds.length > 0) out[l.key] = l.variantIds[0]
+  }
+  return out
+}
+
+function randomSelected(layers: ReturnType<typeof getAllLayers>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const l of layers) {
+    if (l.variantIds.length > 0) {
+      out[l.key] = l.variantIds[Math.floor(Math.random() * l.variantIds.length)]
+    }
+  }
+  return out
+}
 
 function reducer(h: History, a: Action): History {
   switch (a.type) {
-    case 'SET':
-      return { past: [...h.past, h.present], present: { ...h.present, [a.key]: a.value }, future: [] }
-    case 'RANDOM':
-      return { past: [...h.past, h.present], present: randomState(), future: [] }
+    case 'SET_VARIANT': {
+      const next = { ...h.present, selected: { ...h.present.selected, [a.layerKey]: a.variantId } }
+      return { past: [...h.past, h.present], present: next, future: [] }
+    }
+    case 'RANDOM': {
+      const next = { ...h.present, selected: randomSelected(a.layers) }
+      return { past: [...h.past, h.present], present: next, future: [] }
+    }
     case 'UNDO':
       if (!h.past.length) return h
       return { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future] }
@@ -87,385 +60,263 @@ function reducer(h: History, a: Action): History {
   }
 }
 
-// ── Layer builder — hybrid: blob URL si está cargado, server file si no ───────
-
-function buildLayers(s: AvatarState): LayerConfig[] {
-  const hairFrontId = HAIR_FRONT_ID[s.hairStyle]
-  const hairBackId  = `BH-${s.hairStyle}`
-
-  function resolve(
-    layerKey: string, serverFile: string,
-    groupId: string, allGroupIds: string[],
-    extras: Partial<LayerConfig>,
-  ): LayerConfig {
-    const blob = getBlobUrl(layerKey, groupId)
-    if (blob) return { file: blob, ...extras } as LayerConfig
-    return { file: serverFile, variants: allGroupIds, group: groupId, ...extras } as LayerConfig
-  }
-
-  return [
-    resolve('hair-back',  '/avatars/hair-back.svg',  hairBackId,    HAIR_BACK_IDS,  { colorKey: 'hair', order: 1 }),
-    { file: '/avatars/body.svg', colorKey: 'skin', order: 2 },
-    resolve('clothes',    '/avatars/clothes.svg',     s.clothesVariant, CLOTHES_IDS, { order: 3 }),
-    resolve('head',       '/avatars/head.svg',        s.faceVariant, FACE_IDS,       { colorKey: 'skin', scaleX: s.faceWidth, order: 4 }),
-    resolve('emotion',    '/avatars/emotion.svg',     s.emotion,     EMOTION_IDS,    { order: 5 }),
-    resolve('hair-front', '/avatars/hair-front.svg',  hairFrontId,   HAIR_FRONT_IDS, { colorKey: 'hair', order: 6 }),
-    ...(s.showMask ? [{ file: '/avatars/mask.svg', order: 7 } as LayerConfig] : []),
-  ]
-}
-
-// ── Thumbnail hook ────────────────────────────────────────────────────────────
-
-function useBatchThumbnails(
-  file: string,   // '' = skip (usar previews del store)
-  groups: string[],
-  colorKey: 'skin' | 'hair' | null,
-  skinColor: string,
-  hairColor: string,
-): Record<string, string> {
-  const [urls, setUrls] = useState<Record<string, string>>({})
-  const depKey = colorKey === 'skin' ? skinColor : colorKey === 'hair' ? hairColor : '__static__'
-
-  useEffect(() => {
-    if (!file) return   // sin archivo = está cubierto por el store
-    let cancelled = false
-    setUrls({})
-    ;(async () => {
-      for (const g of groups) {
-        if (cancelled) return
-        const canvas = document.createElement('canvas')
-        const comp   = new CompositorV2()
-        comp.init(canvas, 80)
-        await comp.render({
-          layers: [{ file, variants: groups, group: g, colorKey: colorKey ?? undefined, order: 1 }],
-          skinColor, hairColor,
-        })
-        const url = comp.exportPNG()
-        if (!cancelled) setUrls(prev => ({ ...prev, [g]: url }))
-      }
-    })()
-    return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [file, depKey])
-
-  return urls
-}
-
-// ── UI components ─────────────────────────────────────────────────────────────
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ padding: '14px 16px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-      <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.22)', margin: '0 0 10px' }}>
-        {title}
-      </p>
-      {children}
-    </div>
-  )
-}
-
-function Swatches({ colors, active, onPick }: { colors: string[]; active: string; onPick: (c: string) => void }) {
-  return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-      {colors.map(c => (
-        <button key={c} onClick={() => onPick(c)} style={{
-          width: 22, height: 22, borderRadius: '50%', background: c,
-          border: active === c ? '2.5px solid white' : '2px solid rgba(255,255,255,0.08)',
-          boxShadow: active === c ? '0 0 0 2px rgba(255,255,255,0.25)' : 'none',
-          transform: active === c ? 'scale(1.15)' : 'scale(1)',
-          cursor: 'pointer', transition: 'transform 0.1s, box-shadow 0.1s',
-        }} />
-      ))}
-    </div>
-  )
-}
-
-function ThumbGrid({ ids, labels, thumbs, active, onSelect, cols = 4 }: {
-  ids: readonly string[]
-  labels?: Record<string, string>
-  thumbs: Record<string, string>
-  active: string
-  onSelect: (id: string) => void
-  cols?: number
-}) {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 5 }}>
-      {ids.map(id => {
-        const on = active === id
-        return (
-          <button key={id} onClick={() => onSelect(id)} title={labels?.[id] ?? id} style={{
-            aspectRatio: '1', borderRadius: 9, padding: 0, overflow: 'hidden',
-            border: `2px solid ${on ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.07)'}`,
-            background: on ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)',
-            cursor: 'pointer', transition: 'border-color 0.1s',
-          }}>
-            {thumbs[id] ? (
-              <img src={thumbs[id]} alt={labels?.[id] ?? id}
-                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
-            ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(255,255,255,0.07)' }} />
-              </div>
-            )}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function Btn({ onClick, disabled, primary, title, children }: {
-  onClick: () => void; disabled?: boolean; primary?: boolean; title?: string; children: React.ReactNode
-}) {
-  return (
-    <button onClick={onClick} disabled={disabled} title={title} style={primary ? {
-      padding: '10px 20px', borderRadius: 10, border: 'none',
-      background: disabled ? 'rgba(255,255,255,0.2)' : 'white',
-      color: '#0d0d0f', fontSize: 13, fontWeight: 700,
-      cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
-    } : {
-      padding: '10px 14px', borderRadius: 10,
-      border: '1px solid rgba(255,255,255,0.1)',
-      background: 'rgba(255,255,255,0.04)',
-      color: disabled ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.65)',
-      fontSize: 13, cursor: disabled ? 'not-allowed' : 'pointer',
-    }}>
-      {children}
-    </button>
-  )
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function BuilderV2() {
-  const router    = useRouter()
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const compRef   = useRef<CompositorV2 | null>(null)
-  const [h, dispatch]  = useReducer(reducer, { past: [], present: DEFAULT, future: [] })
-  const state          = h.present
-  const [rendering, setRendering]               = useState(false)
-  const [avatarForComposer, setAvatarForComposer] = useState<string | null>(null)
-
-  // Read loaded layers once on mount (module-level store is synchronous)
-  const loadedLayers = loadedLayerKeys()
-
-  // ── Compositor ────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!canvasRef.current) return
-    const comp = new CompositorV2()
-    comp.init(canvasRef.current, 1024)
-    compRef.current = comp
-  }, [])
-
-  useEffect(() => {
-    const comp = compRef.current
-    if (!comp) return
-    setRendering(true)
-    comp.render({ layers: buildLayers(state), skinColor: state.skinColor, hairColor: state.hairColor })
-      .catch(console.error)
-      .finally(() => setRendering(false))
-  }, [state])
-
-  // ── Thumbnails — uploaded previews take priority, batch-render as fallback ──
-
-  // When a layer is loaded from the store, its previewUrls are already 120px renders.
-  // Pass '' as file to useBatchThumbnails so it skips and returns {}.
-  const batchFaceThumbs    = useBatchThumbnails(isLayerLoaded('head')       ? '' : '/avatars/head.svg',       FACE_IDS,       'skin', state.skinColor, state.hairColor)
-  const batchHairFThumbs   = useBatchThumbnails(isLayerLoaded('hair-front') ? '' : '/avatars/hair-front.svg', HAIR_FRONT_IDS, 'hair', state.skinColor, state.hairColor)
-  const batchClothesThumbs = useBatchThumbnails(isLayerLoaded('clothes')    ? '' : '/avatars/clothes.svg',    CLOTHES_IDS,    null,   state.skinColor, state.hairColor)
-  const batchEmotionThumbs = useBatchThumbnails(isLayerLoaded('emotion')    ? '' : '/avatars/emotion.svg',    EMOTION_IDS,    null,   state.skinColor, state.hairColor)
-
-  const faceThumbs    = { ...batchFaceThumbs,    ...getPreviewUrls('head') }
-  const hairFThumbs   = { ...batchHairFThumbs,   ...getPreviewUrls('hair-front') }
-  const clothesThumbs = { ...batchClothesThumbs, ...getPreviewUrls('clothes') }
-  const emotionThumbs = { ...batchEmotionThumbs, ...getPreviewUrls('emotion') }
-
-  // Remap hair front thumbnails from groupId key to style letter key
-  const hairStyleThumbs: Record<string, string> = {}
-  HAIR_STYLES.forEach(s => {
-    const v = hairFThumbs[HAIR_FRONT_ID[s]]
-    if (v) hairStyleThumbs[s] = v
+  const router = useRouter()
+  const [layers, setLayers] = useState<ReturnType<typeof getAllLayers>>([])
+  const [history, dispatch] = useReducer(reducer, {
+    past: [], present: { selected: {} }, future: [],
   })
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-
-  const set = useCallback(
-    <K extends keyof AvatarState>(k: K, v: AvatarState[K]) =>
-      dispatch({ type: 'SET', key: k, value: v }),
-    [],
-  )
-
-  const handleExport = useCallback(() => {
-    const url = compRef.current?.exportPNG()
-    if (!url) return
-    const a = document.createElement('a')
-    a.href = url; a.download = 'avatar.png'; a.click()
+  // Reload layers from store whenever component mounts or navigates here
+  useEffect(() => {
+    const all = getAllLayers()
+    setLayers(all)
+    if (Object.keys(history.present.selected).length === 0 && all.length > 0) {
+      dispatch({ type: 'RANDOM', layers: all })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleGoToComposer = useCallback(() => {
-    const url = compRef.current?.exportPNG()
-    if (url) setAvatarForComposer(url)
-  }, [])
-
-  if (avatarForComposer) {
-    return <FinalComposer avatarDataUrl={avatarForComposer} onBack={() => setAvatarForComposer(null)} />
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  const { selected } = history.present
+  const noLayers     = layers.length === 0
 
   return (
-    <div style={{
-      display: 'flex', height: '100dvh',
-      background: '#0d0d0f', color: 'white',
-      fontFamily: '"Inter", system-ui, sans-serif',
-      overflow: 'hidden', flexDirection: 'column',
-    }}>
-      {/* Custom assets banner */}
-      {loadedLayers.length > 0 && (
-        <div style={{
-          flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '7px 20px',
-          background: 'rgba(100,220,140,0.06)',
-          borderBottom: '1px solid rgba(100,220,140,0.12)',
-        }}>
-          <span style={{ fontSize: 11, color: 'rgba(100,220,140,0.7)' }}>
-            ⚡ Assets personalizados:{' '}
-            {loadedLayers.map(k => LAYER_CATALOG[k] ?? k).join(', ')}
-          </span>
-          <button
-            onClick={() => {
-              const locale = window.location.pathname.split('/')[1] || 'es'
-              router.push(`/${locale}/svg-processor`)
-            }}
-            style={{
-              fontSize: 11, background: 'transparent', border: 'none',
-              color: 'rgba(100,220,140,0.6)', cursor: 'pointer', padding: '2px 6px',
-            }}
-          >
-            + Cargar más capas
+    <div style={s.root}>
+      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
+      <aside style={s.sidebar}>
+        <div style={s.sidebarTop}>
+          <span style={s.logo}>Avatar OS</span>
+          <button style={s.addBtn} onClick={() => router.push('/es/svg-processor')}>
+            + Capa
           </button>
         </div>
-      )}
 
-      {/* Main layout */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* ── Left sidebar ── */}
-        <div style={{
-          width: 280, flexShrink: 0, overflowY: 'auto',
-          background: '#111115', borderRight: '1px solid rgba(255,255,255,0.05)',
-        }}>
-          <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-0.02em' }}>Avatar Studio</span>
-          </div>
-
-          {/* Piel & Cara */}
-          <Section title="Piel & Cara">
-            <Swatches colors={SKIN_TONES} active={state.skinColor} onPick={c => set('skinColor', c)} />
-            <ThumbGrid ids={FACE_IDS} thumbs={faceThumbs} active={state.faceVariant}
-              onSelect={id => set('faceVariant', id)} cols={3} />
-            <div style={{ marginTop: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.2)' }}>Ancho cara</span>
-                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', fontVariantNumeric: 'tabular-nums' }}>{state.faceWidth.toFixed(2)}×</span>
-              </div>
-              <input type="range" min={0.75} max={1.25} step={0.01}
-                value={state.faceWidth}
-                onChange={e => set('faceWidth', parseFloat(e.target.value))}
-                style={{ width: '100%', accentColor: 'rgba(255,255,255,0.55)', margin: 0 }}
-              />
-            </div>
-          </Section>
-
-          {/* Cabello */}
-          <Section title="Cabello">
-            <Swatches colors={HAIR_COLORS} active={state.hairColor} onPick={c => set('hairColor', c)} />
-            <ThumbGrid ids={HAIR_STYLES} thumbs={hairStyleThumbs} active={state.hairStyle}
-              onSelect={id => set('hairStyle', id as HairStyle)} cols={4} />
-          </Section>
-
-          {/* Ropa */}
-          <Section title="Ropa">
-            <ThumbGrid ids={CLOTHES_IDS} labels={CLOTHES_LABELS} thumbs={clothesThumbs}
-              active={state.clothesVariant} onSelect={id => set('clothesVariant', id)} cols={3} />
-          </Section>
-
-          {/* Expresión */}
-          <Section title="Expresión">
-            <ThumbGrid ids={EMOTION_IDS} labels={EMOTION_LABELS} thumbs={emotionThumbs}
-              active={state.emotion} onSelect={id => set('emotion', id)} cols={3} />
-          </Section>
-
-          {/* Extras */}
-          <Section title="Extras">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
-              <input type="checkbox" checked={state.showMask}
-                onChange={e => set('showMask', e.target.checked)}
-                style={{ accentColor: 'white', width: 14, height: 14 }}
-              />
-              Máscara
-            </label>
-
-            {/* Link to SVG processor */}
-            <button
-              onClick={() => {
-                const locale = window.location.pathname.split('/')[1] || 'es'
-                router.push(`/${locale}/svg-processor`)
-              }}
-              style={{
-                marginTop: 12, width: '100%', padding: '7px 0',
-                border: '1px solid rgba(255,255,255,0.08)',
-                background: 'rgba(255,255,255,0.02)',
-                color: 'rgba(255,255,255,0.35)',
-                borderRadius: 8, fontSize: 11, cursor: 'pointer',
-              }}
-            >
-              ↑ Subir SVG personalizado
+        {noLayers ? (
+          <div style={s.empty}>
+            <p style={s.emptyText}>
+              No hay capas cargadas.<br />
+              Sube un SVG para empezar.
+            </p>
+            <button style={s.primaryBtn} onClick={() => router.push('/es/svg-processor')}>
+              Subir SVG →
             </button>
-          </Section>
+          </div>
+        ) : (
+          <div style={s.layerList}>
+            {layers.map(layer => (
+              <LayerSection
+                key={layer.key}
+                layer={layer}
+                selectedVariant={selected[layer.key] ?? layer.variantIds[0]}
+                onSelect={(vid) => dispatch({ type: 'SET_VARIANT', layerKey: layer.key, variantId: vid })}
+              />
+            ))}
+          </div>
+        )}
+      </aside>
+
+      {/* ── Canvas area ─────────────────────────────────────────────────── */}
+      <main style={s.main}>
+        {/* Toolbar */}
+        <div style={s.toolbar}>
+          <button style={s.toolBtn} onClick={() => dispatch({ type: 'UNDO' })}
+            disabled={!history.past.length}>↩ Deshacer</button>
+          <button style={s.toolBtn} onClick={() => dispatch({ type: 'REDO' })}
+            disabled={!history.future.length}>↪ Rehacer</button>
+          <button style={s.toolBtn} onClick={() => dispatch({ type: 'RANDOM', layers })}>
+            🎲 Random
+          </button>
         </div>
 
-        {/* ── Center ── */}
-        <div style={{
-          flex: 1, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          padding: '40px 48px', gap: 28, overflow: 'hidden',
-        }}>
-          {/* Avatar preview */}
-          <div style={{
-            position: 'relative',
-            width: 'min(420px, calc(100vh - 240px))',
-            aspectRatio: '1',
-            borderRadius: '50%', overflow: 'hidden',
-            background: 'radial-gradient(ellipse at 35% 25%, rgba(90,60,140,0.18) 0%, #17171c 65%)',
-            boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 40px 100px rgba(0,0,0,0.85)',
-            flexShrink: 0,
-          }}>
-            <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
-            {rendering && (
-              <div style={{
-                position: 'absolute', inset: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(0,0,0,0.2)',
-                fontSize: 9, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.2)',
-              }}>
-                RENDERIZANDO
+        {/* Avatar preview — CSS stacked img layers */}
+        <div style={s.previewWrap}>
+          <div style={s.circle}>
+            {noLayers ? (
+              <div style={s.placeholder}>
+                <span style={{ fontSize: 48 }}>🎨</span>
+                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14, marginTop: 12 }}>
+                  Sube capas para ver el avatar
+                </p>
               </div>
+            ) : (
+              layers.map(layer => {
+                const variantId = selected[layer.key] ?? layer.variantIds[0]
+                const url       = getBlobUrl(layer.key, variantId)
+                if (!url) return null
+                return (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={layer.key}
+                    src={url}
+                    alt={layer.name}
+                    style={s.layer}
+                  />
+                )
+              })
             )}
           </div>
-
-          {/* Action bar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Btn onClick={() => dispatch({ type: 'RANDOM' })} disabled={rendering}>🎲 Aleatorio</Btn>
-            <Btn onClick={() => dispatch({ type: 'UNDO' })} disabled={!h.past.length} title="Deshacer">↩</Btn>
-            <Btn onClick={() => dispatch({ type: 'REDO' })} disabled={!h.future.length} title="Rehacer">↪</Btn>
-            <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)', margin: '0 2px' }} />
-            <Btn onClick={handleExport} disabled={rendering}>⬇ Descargar</Btn>
-            <Btn onClick={handleGoToComposer} disabled={rendering} primary>Marco final →</Btn>
-          </div>
         </div>
+      </main>
+    </div>
+  )
+}
+
+// ── Layer section ─────────────────────────────────────────────────────────────
+
+function LayerSection({
+  layer,
+  selectedVariant,
+  onSelect,
+}: {
+  layer:           ReturnType<typeof getAllLayers>[number]
+  selectedVariant: string
+  onSelect:        (id: string) => void
+}) {
+  const previews = getPreviewUrls(layer.key)
+
+  return (
+    <div style={s.section}>
+      <div style={s.sectionHeader}>
+        <span style={s.sectionName}>{layer.name}</span>
+        <span style={s.sectionOrder}>z{layer.order}</span>
+      </div>
+      <div style={s.thumbGrid}>
+        {layer.variantIds.map(vid => {
+          const active = vid === selectedVariant
+          return (
+            <button key={vid} onClick={() => onSelect(vid)} title={vid}
+              style={{ ...s.thumb, ...(active ? s.thumbActive : {}) }}>
+              {previews[vid]
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={previews[vid]} alt={vid} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                : <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10 }}>{vid}</span>
+              }
+            </button>
+          )
+        })}
       </div>
     </div>
   )
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const s = {
+  root: {
+    display: 'flex', height: '100vh', background: '#0f0f0f',
+    fontFamily: 'system-ui, sans-serif', overflow: 'hidden',
+  } as React.CSSProperties,
+
+  sidebar: {
+    width: 280, flexShrink: 0,
+    background: '#141414', borderRight: '1px solid rgba(255,255,255,0.06)',
+    display: 'flex', flexDirection: 'column', overflow: 'hidden',
+  } as React.CSSProperties,
+
+  sidebarTop: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '18px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)',
+  } as React.CSSProperties,
+
+  logo: { color: '#fff', fontWeight: 700, fontSize: 16 } as React.CSSProperties,
+
+  addBtn: {
+    background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)',
+    border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+    padding: '6px 12px', fontSize: 13, cursor: 'pointer',
+  } as React.CSSProperties,
+
+  layerList: { flex: 1, overflowY: 'auto', padding: '8px 0' } as React.CSSProperties,
+
+  section: {
+    padding: '14px 16px 16px',
+    borderBottom: '1px solid rgba(255,255,255,0.04)',
+  } as React.CSSProperties,
+
+  sectionHeader: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: 10,
+  } as React.CSSProperties,
+
+  sectionName: {
+    color: 'rgba(255,255,255,0.55)', fontSize: 10,
+    fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
+  } as React.CSSProperties,
+
+  sectionOrder: {
+    color: 'rgba(255,255,255,0.2)', fontSize: 10,
+  } as React.CSSProperties,
+
+  thumbGrid: {
+    display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5,
+  } as React.CSSProperties,
+
+  thumb: {
+    aspectRatio: '1', borderRadius: 8, overflow: 'hidden', cursor: 'pointer',
+    border: '2px solid rgba(255,255,255,0.06)',
+    background: 'rgba(255,255,255,0.02)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 0, transition: 'border-color 0.1s',
+  } as React.CSSProperties,
+
+  thumbActive: {
+    border: '2px solid rgba(255,255,255,0.55)',
+    background: 'rgba(255,255,255,0.06)',
+  } as React.CSSProperties,
+
+  empty: {
+    flex: 1, display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
+    padding: 24, gap: 16,
+  } as React.CSSProperties,
+
+  emptyText: {
+    color: 'rgba(255,255,255,0.3)', fontSize: 14,
+    textAlign: 'center', lineHeight: 1.6, margin: 0,
+  } as React.CSSProperties,
+
+  primaryBtn: {
+    background: '#fff', color: '#000', border: 'none',
+    borderRadius: 10, padding: '12px 20px', fontSize: 14,
+    fontWeight: 600, cursor: 'pointer',
+  } as React.CSSProperties,
+
+  main: {
+    flex: 1, display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center', gap: 32,
+  } as React.CSSProperties,
+
+  toolbar: { display: 'flex', gap: 8 } as React.CSSProperties,
+
+  toolBtn: {
+    background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.7)',
+    border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10,
+    padding: '8px 16px', fontSize: 13, cursor: 'pointer',
+  } as React.CSSProperties,
+
+  previewWrap: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  } as React.CSSProperties,
+
+  circle: {
+    width: 420, height: 420, borderRadius: '50%',
+    overflow: 'hidden', background: '#1e1e1e',
+    border: '2px solid rgba(255,255,255,0.08)',
+    position: 'relative',
+    boxShadow: '0 0 80px rgba(0,0,0,0.5)',
+  } as React.CSSProperties,
+
+  layer: {
+    position: 'absolute', inset: 0,
+    width: '100%', height: '100%',
+    objectFit: 'contain',
+  } as React.CSSProperties,
+
+  placeholder: {
+    width: '100%', height: '100%',
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
+  } as React.CSSProperties,
 }
