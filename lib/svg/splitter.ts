@@ -2,8 +2,8 @@
 
 export interface SvgGroupInfo {
   id:           string
-  extractedSvg: string
-  previewUrl:   string
+  extractedSvg: string   // SVG con viewBox ORIGINAL — para CSS stacking correcto
+  previewUrl:   string   // data URL 120px con recorte ajustado — para thumbnails
   bbox:         { x: number; y: number; width: number; height: number }
 }
 
@@ -11,7 +11,7 @@ export interface SvgGroupInfo {
 
 /**
  * Busca el elemento con más hijos <g id="..."> directos.
- * Soporta estructura anidada de Affinity Designer (grupos dentro de grupos).
+ * Soporta estructura anidada de Affinity Designer.
  */
 export function detectGroups(svgText: string): string[] {
   const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml')
@@ -36,19 +36,25 @@ export function detectGroups(svgText: string): string[] {
 // ── Group extraction ──────────────────────────────────────────────────────────
 
 /**
- * Extrae un grupo como SVG standalone con viewBox correcto.
+ * Extrae un grupo con dos resultados:
  *
- * Estrategia:
- *  1. Renderiza el SVG con un viewBox MUY amplio (para ver contenido off-canvas).
- *  2. Usa getBoundingClientRect para obtener posición real en pantalla.
- *  3. Convierte a coordenadas SVG — esto da el viewBox correcto.
- *  4. Incluye los transforms de los ancestros en el SVG resultante para que
- *     el contenido se renderice exactamente donde debe.
+ * • extractedSvg — conserva el viewBox ORIGINAL del SVG con todos los grupos
+ *   hermanos ocultados. Cuando varias capas usan el mismo tamaño de artboard
+ *   (ej. 2001×2000) se alinean perfectamente al stackear con CSS.
+ *
+ * • previewUrl — recorte ajustado al bounding box real del grupo usando
+ *   getBoundingClientRect con un viewBox enorme. Sirve para los thumbnails
+ *   del sidebar donde necesitamos ver el contenido sin espacio en blanco.
  */
 export function extractGroup(svgText: string, groupId: string): Promise<SvgGroupInfo | null> {
   return new Promise(resolve => {
+    // ── 1. SVG de compositing: viewBox original, hermanos ocultos ─────────
+    const compositeSvg = makeSiblingHidden(svgText, groupId)
+    if (!compositeSvg) { resolve(null); return }
+
+    // ── 2. Thumbnail: recorte ajustado via getBoundingClientRect ──────────
     const CONTAINER_PX = 5000
-    const VB_HALF      = 25000   // viewBox va de -25000 a 25000 en x e y
+    const VB_HALF      = 25000
 
     const container = document.createElement('div')
     container.style.cssText =
@@ -56,17 +62,16 @@ export function extractGroup(svgText: string, groupId: string): Promise<SvgGroup
       `width:${CONTAINER_PX}px;height:${CONTAINER_PX}px;` +
       `overflow:visible;visibility:hidden;pointer-events:none`
 
-    const parser = new DOMParser()
-    const doc    = parser.parseFromString(svgText, 'image/svg+xml')
-    if (doc.querySelector('parsererror')) { resolve(null); return }
+    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml')
+    // Don't check parsererror here — already checked in makeSiblingHidden
 
-    const svgEl = document.importNode(doc.documentElement, true)
-    svgEl.setAttribute('width',   `${CONTAINER_PX}`)
-    svgEl.setAttribute('height',  `${CONTAINER_PX}`)
-    svgEl.setAttribute('viewBox', `${-VB_HALF} ${-VB_HALF} ${VB_HALF * 2} ${VB_HALF * 2}`)
-    svgEl.style.overflow = 'visible'
+    const liveSvgEl = document.importNode(doc.documentElement, true)
+    liveSvgEl.setAttribute('width',   `${CONTAINER_PX}`)
+    liveSvgEl.setAttribute('height',  `${CONTAINER_PX}`)
+    liveSvgEl.setAttribute('viewBox', `${-VB_HALF} ${-VB_HALF} ${VB_HALF * 2} ${VB_HALF * 2}`)
+    liveSvgEl.style.overflow = 'visible'
 
-    container.appendChild(svgEl)
+    container.appendChild(liveSvgEl)
     document.body.appendChild(container)
 
     requestAnimationFrame(() => requestAnimationFrame(async () => {
@@ -85,9 +90,18 @@ export function extractGroup(svgText: string, groupId: string): Promise<SvgGroup
         const svgRect = liveSvg.getBoundingClientRect()
         const gRect   = group.getBoundingClientRect()
 
-        if (gRect.width < 2 || gRect.height < 2) { cleanup(); resolve(null); return }
+        cleanup()
 
-        // Convertir de píxeles de pantalla a coordenadas del espacio SVG viewport
+        let previewUrl: string
+
+        if (gRect.width < 2 || gRect.height < 2) {
+          // Grupo no visible: usar el composite SVG como preview
+          previewUrl = await renderSvgToDataUrl(compositeSvg, 120)
+          resolve({ id: groupId, extractedSvg: compositeSvg, previewUrl, bbox: { x: 0, y: 0, width: 0, height: 0 } })
+          return
+        }
+
+        // Convertir píxeles de pantalla a coordenadas SVG viewport
         const VB_TOTAL = VB_HALF * 2
         const sx = VB_TOTAL / svgRect.width
         const sy = VB_TOTAL / svgRect.height
@@ -96,20 +110,11 @@ export function extractGroup(svgText: string, groupId: string): Promise<SvgGroup
         const y = (gRect.top  - svgRect.top)  * sy - VB_HALF
         const w = gRect.width  * sx
         const h = gRect.height * sy
+        const pad = Math.max(w, h) * 0.05
+        const tightVb = `${x - pad} ${y - pad} ${w + pad * 2} ${h + pad * 2}`
 
-        // Capturar la cadena de transforms de los ancestros para que el contenido
-        // se renderice en las mismas coordenadas en el SVG standalone.
-        const ancestorTransforms: string[] = []
-        let el: Element | null = group.parentElement
-        while (el && el.tagName.toLowerCase() !== 'svg') {
-          const t = el.getAttribute('transform')
-          if (t) ancestorTransforms.unshift(t)
-          el = el.parentElement
-        }
-
-        cleanup()
-
-        // Re-parsear el SVG original para serialización limpia
+        // Para el thumbnail usamos el SVG con la cadena de transforms de los ancestros
+        // para que el recorte se vea correctamente
         const origDoc   = new DOMParser().parseFromString(svgText, 'image/svg+xml')
         const origSvg   = origDoc.querySelector('svg')!
         const origGroup = origSvg.querySelector(`[id="${CSS.escape(groupId)}"]`)!
@@ -117,31 +122,65 @@ export function extractGroup(svgText: string, groupId: string): Promise<SvgGroup
         const ns        = origSvg.getAttribute('xmlns') || 'http://www.w3.org/2000/svg'
         const ser       = new XMLSerializer()
 
-        const defsStr  = defs
-          ? ser.serializeToString(defs).replace(/ xmlns="[^"]*"/g, '')
-          : ''
+        const defsStr  = defs ? ser.serializeToString(defs).replace(/ xmlns="[^"]*"/g, '') : ''
         const groupStr = ser.serializeToString(origGroup).replace(/ xmlns="[^"]*"/g, '')
 
-        // Envolver en los transforms de los ancestros
-        const wrapOpen  = ancestorTransforms.map(t => `<g transform="${t}">`).join('')
-        const wrapClose = ancestorTransforms.map(() => '</g>').join('')
+        const transforms: string[] = []
+        let el: Element | null = origGroup.parentElement
+        while (el && el.tagName.toLowerCase() !== 'svg') {
+          const t = el.getAttribute('transform')
+          if (t) transforms.unshift(t)
+          el = el.parentElement
+        }
+        const wrapOpen  = transforms.map(t => `<g transform="${t}">`).join('')
+        const wrapClose = transforms.map(() => '</g>').join('')
 
-        const pad = Math.max(w, h) * 0.05
-        const vb  = `${x - pad} ${y - pad} ${w + pad * 2} ${h + pad * 2}`
+        const tightSvg = `<svg xmlns="${ns}" viewBox="${tightVb}">${defsStr}${wrapOpen}${groupStr}${wrapClose}</svg>`
 
-        const extractedSvg =
-          `<svg xmlns="${ns}" viewBox="${vb}">${defsStr}${wrapOpen}${groupStr}${wrapClose}</svg>`
+        previewUrl = await renderSvgToDataUrl(tightSvg, 120)
 
-        const previewUrl = await renderSvgToDataUrl(extractedSvg, 120)
-
-        resolve({ id: groupId, extractedSvg, previewUrl, bbox: { x, y, width: w, height: h } })
+        resolve({
+          id: groupId,
+          extractedSvg: compositeSvg,
+          previewUrl,
+          bbox: { x, y, width: w, height: h },
+        })
 
       } catch {
         cleanup()
-        resolve(null)
+        // Fallback: usar composite como preview
+        renderSvgToDataUrl(compositeSvg, 120)
+          .then(previewUrl => resolve({ id: groupId, extractedSvg: compositeSvg, previewUrl, bbox: { x: 0, y: 0, width: 0, height: 0 } }))
+          .catch(() => resolve(null))
       }
     }))
   })
+}
+
+/**
+ * Oculta todos los grupos hermanos del grupo indicado.
+ * Conserva el viewBox original para que el CSS stacking sea correcto.
+ */
+function makeSiblingHidden(svgText: string, groupId: string): string | null {
+  const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml')
+  if (doc.querySelector('parsererror')) return null
+
+  const svgEl = doc.querySelector('svg')
+  if (!svgEl) return null
+
+  const target = svgEl.querySelector(`[id="${CSS.escape(groupId)}"]`)
+  if (!target) return null
+
+  // Ocultar todos los hermanos con id en el mismo nivel
+  const parent = target.parentElement!
+  for (const child of Array.from(parent.children)) {
+    const c = child as Element
+    if (c.id && c.id !== groupId) {
+      c.setAttribute('style', (c.getAttribute('style') ?? '') + ';display:none')
+    }
+  }
+
+  return new XMLSerializer().serializeToString(svgEl)
 }
 
 // ── Preview render ────────────────────────────────────────────────────────────
@@ -153,7 +192,7 @@ async function renderSvgToDataUrl(svgText: string, size: number): Promise<string
     const img = new Image()
     await new Promise<void>((ok, err) => {
       img.onload  = () => ok()
-      img.onerror = () => err(new Error('SVG render failed'))
+      img.onerror = () => err(new Error('render failed'))
       img.src = burl
     })
     const canvas = document.createElement('canvas')
