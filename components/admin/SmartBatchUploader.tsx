@@ -264,7 +264,7 @@ export default function SmartBatchUploader({ collections, layers, onDone }: Prop
 // ══════════════════════════════════════════════════════════
 function IdleZone({ dragging, inputRef, onDrop, onDragChange, collections, collectionId, onCollectionChange }: {
   dragging: boolean
-  inputRef: React.RefObject<HTMLInputElement>
+  inputRef: React.RefObject<HTMLInputElement | null>
   onDrop:   (files: FileList | File[]) => void
   onDragChange: (v: boolean) => void
   collections: Collection[]
