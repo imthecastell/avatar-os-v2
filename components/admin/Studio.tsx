@@ -125,6 +125,33 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     setSaving(false)
   }
 
+  // ── Move layer up/down (touch-friendly) ───────────────
+  async function moveLayer(collIdx: number, dir: 'up' | 'down') {
+    const toCollIdx = dir === 'up' ? collIdx - 1 : collIdx + 1
+    if (toCollIdx < 0 || toCollIdx >= collLayers.length) return
+    if (collLayers[toCollIdx]?.locked) return
+
+    const globalFrom = layers.indexOf(collLayers[collIdx])
+    const globalTo   = layers.indexOf(collLayers[toCollIdx])
+
+    const next = [...layers]
+    ;[next[globalFrom], next[globalTo]] = [next[globalTo], next[globalFrom]]
+    setLayers(next)
+
+    setSaving(true)
+    await Promise.all([
+      fetch('/api/layers', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: next[globalFrom].id, order_index: globalFrom }),
+      }),
+      fetch('/api/layers', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: next[globalTo].id, order_index: globalTo }),
+      }),
+    ])
+    setSaving(false)
+  }
+
   // ── Avatar mutations ──────────────────────────────────
   function selectAsset(layerKey: string, assetId: string | null) {
     setAvatarState(s => ({ ...s, selectedAssets: { ...s.selectedAssets, [layerKey]: assetId } }))
@@ -350,6 +377,29 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                 }}>
                   {count}
                 </span>
+                {/* Move up / down — always visible, touch-friendly */}
+                {!layer.locked && (
+                  <div className="flex flex-col shrink-0" style={{ gap: 1 }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); moveLayer(i, 'up') }}
+                      disabled={i === 0}
+                      className="w-4 h-3.5 flex items-center justify-center rounded text-[8px] transition-colors disabled:opacity-20"
+                      style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.06)' }}
+                      onMouseEnter={e => (e.currentTarget.style.color = 'white')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.35)')}
+                      title="Subir capa"
+                    >▲</button>
+                    <button
+                      onClick={e => { e.stopPropagation(); moveLayer(i, 'down') }}
+                      disabled={i === collLayers.length - 1}
+                      className="w-4 h-3.5 flex items-center justify-center rounded text-[8px] transition-colors disabled:opacity-20"
+                      style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.06)' }}
+                      onMouseEnter={e => (e.currentTarget.style.color = 'white')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.35)')}
+                      title="Bajar capa"
+                    >▼</button>
+                  </div>
+                )}
                 {/* Delete layer button — visible on hover */}
                 <button
                   onClick={e => { e.stopPropagation(); deleteLayer(layer.id, layer.layerKey, layer.labelEs) }}
@@ -370,7 +420,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
 
         <div className="p-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
           <p className="text-[9px] text-center" style={{ color: 'rgba(255,255,255,0.15)' }}>
-            Arrastra para reordenar
+            ▲ ▼ para reordenar
           </p>
         </div>
       </aside>
