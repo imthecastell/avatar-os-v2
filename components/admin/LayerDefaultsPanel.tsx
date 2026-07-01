@@ -20,6 +20,7 @@ export default function LayerDefaultsPanel({ collections, defaults: initial }: P
   const [collectionId, setCollId] = useState(collections[0]?.id ?? '')
   const [defaults, setDefaults]   = useState(initial)
   const [saving, setSaving]       = useState<string | null>(null)
+  const [deleting, setDeleting]   = useState<string | null>(null)
 
   const collDefaults = defaults.filter(d => d.collectionId === collectionId)
 
@@ -56,6 +57,13 @@ export default function LayerDefaultsPanel({ collections, defaults: initial }: P
     setSaving(null)
   }
 
+  async function handleDelete(tokenId: string, id: string) {
+    setDeleting(tokenId)
+    const res = await fetch(`/api/layer-defaults?id=${id}`, { method: 'DELETE' })
+    if (res.ok) setDefaults(prev => prev.filter(d => d.id !== id))
+    setDeleting(null)
+  }
+
   const cardS = { background: '#111120', border: '1px solid rgba(255,255,255,0.07)' }
 
   return (
@@ -83,7 +91,9 @@ export default function LayerDefaultsPanel({ collections, defaults: initial }: P
                 token={token}
                 current={current}
                 saving={saving === token.id}
+                deleting={deleting === token.id}
                 onSave={handleSave}
+                onDelete={handleDelete}
               />
             )
           })}
@@ -101,12 +111,14 @@ export default function LayerDefaultsPanel({ collections, defaults: initial }: P
 }
 
 function TokenRow({
-  token, current, saving, onSave,
+  token, current, saving, deleting, onSave, onDelete,
 }: {
-  token:   { id: string; label: string; emoji: string; example: string }
-  current: LayerDefault | undefined
-  saving:  boolean
-  onSave:  (tokenId: string, hex: string, name: string) => void
+  token:    { id: string; label: string; emoji: string; example: string }
+  current:  LayerDefault | undefined
+  saving:   boolean
+  deleting: boolean
+  onSave:   (tokenId: string, hex: string, name: string) => void
+  onDelete: (tokenId: string, id: string) => void
 }) {
   const [hex,  setHex]  = useState(current?.defaultHex  ?? token.example)
   const [name, setName] = useState(current?.defaultName ?? '')
@@ -117,6 +129,15 @@ function TokenRow({
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-white">{token.label}</p>
         <p className="text-[9px] font-mono mt-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>{token.id}</p>
+        {current && (
+          <p className="text-[9px] mt-0.5 flex items-center gap-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
+            <span
+              className="inline-block w-2 h-2 rounded-full shrink-0"
+              style={{ background: current.defaultHex }}
+            />
+            {current.defaultHex}{current.defaultName ? ` · ${current.defaultName}` : ''}
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -136,12 +157,25 @@ function TokenRow({
         />
         <button
           onClick={() => onSave(token.id, hex, name)}
-          disabled={saving}
+          disabled={saving || deleting}
           className="text-[10px] font-semibold px-3 py-2 rounded-xl disabled:opacity-50 transition-all shrink-0"
           style={{ background: 'rgba(124,58,237,0.85)', color: 'white' }}
         >
           {saving ? '…' : 'Guardar'}
         </button>
+        {current && (
+          <button
+            onClick={() => onDelete(token.id, current.id)}
+            disabled={deleting || saving}
+            className="text-[10px] font-semibold px-3 py-2 rounded-xl disabled:opacity-50 transition-all shrink-0"
+            style={{ background: 'rgba(239,68,68,0.15)', color: '#fca5a5' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.28)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.15)')}
+            title="Eliminar default"
+          >
+            {deleting ? '…' : '✕ Reset'}
+          </button>
+        )}
       </div>
     </div>
   )
