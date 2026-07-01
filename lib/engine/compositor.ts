@@ -1,6 +1,7 @@
 'use client'
 
 import type { AvatarState, Layer, Asset } from '@/types'
+import { detectEditableColors } from '@/lib/engine/asset-classifier'
 
 export class AvatarCompositor {
   private canvas!: HTMLCanvasElement
@@ -131,9 +132,11 @@ export class AvatarCompositor {
 
     if (layer.colorToken && tokens[layer.colorToken]) {
       const role = layer.colorToken === 'skin-color' ? 'skin' : 'primary'
-      const originalColor = asset.colorMap.find(c => c.role === role)
+      // Fall back to live detection if colorMap is empty (assets uploaded before CSS-detection fix)
+      const colorMap = asset.colorMap?.length ? asset.colorMap : detectEditableColors(svgText)
+      const originalColor = colorMap.find((c: { role: string }) => c.role === role)
       if (originalColor) {
-        svgText = this.recolorSVG(svgText, originalColor.original, tokens[layer.colorToken])
+        svgText = this.recolorSVG(svgText, (originalColor as { original: string }).original, tokens[layer.colorToken])
       }
     }
 

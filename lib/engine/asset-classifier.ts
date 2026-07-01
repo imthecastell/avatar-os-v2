@@ -84,38 +84,60 @@ const IGNORED_COLORS = new Set([
   'none', 'transparent',
 ])
 
-export function isSVGEditable(svgText: string): boolean {
-  const colorRegex = /(?:fill|stroke|stop-color)="([^"]+)"/g
-  let match
-  while ((match = colorRegex.exec(svgText)) !== null) {
-    const c = match[1].toLowerCase().trim()
-    if (!IGNORED_COLORS.has(c) && c !== 'none' && !c.startsWith('url(')) {
-      return true
-    }
+const HEX_OR_RGB = '#[0-9a-fA-F]{3,8}|rgb\\([^)]+\\)'
+
+function collectColors(svgText: string): Record<string, number> {
+  const counts: Record<string, number> = {}
+
+  function add(color: string) {
+    const c = color.trim()
+    if (!IGNORED_COLORS.has(c.toLowerCase())) counts[c] = (counts[c] || 0) + 1
   }
-  return false
+
+  let m: RegExpExecArray | null
+
+  // 1. Inline attributes: fill="#hex" stroke="rgb(...)"
+  const attrRe = new RegExp(`(?:fill|stroke|stop-color)="(${HEX_OR_RGB})"`, 'g')
+  while ((m = attrRe.exec(svgText)) !== null) add(m[1])
+
+  // 2. style="…fill:#hex…" or style="…fill: rgb(…)…"
+  const styleAttrRe = /style="([^"]*)"/g
+  while ((m = styleAttrRe.exec(svgText)) !== null) {
+    const inner = m[1]
+    const propRe = new RegExp(`(?:fill|stroke|stop-color):\\s*(${HEX_OR_RGB})`, 'g')
+    let pm: RegExpExecArray | null
+    while ((pm = propRe.exec(inner)) !== null) add(pm[1])
+  }
+
+  // 3. <style> blocks
+  const blockRe = /<style[^>]*>([\s\S]*?)<\/style>/gi
+  while ((m = blockRe.exec(svgText)) !== null) {
+    const css = m[1]
+    const propRe = new RegExp(`(?:fill|stroke|stop-color):\\s*(${HEX_OR_RGB})`, 'g')
+    let pm: RegExpExecArray | null
+    while ((pm = propRe.exec(css)) !== null) add(pm[1])
+  }
+
+  return counts
+}
+
+export function isSVGEditable(svgText: string): boolean {
+  return Object.keys(collectColors(svgText)).length > 0
 }
 
 export function detectEditableColors(svgText: string): Array<{
   original: string
-  role: string
-  label: string
-  count: number
+  role:     string
+  label:    string
+  count:    number
 }> {
-  const colorRegex = /(?:fill|stroke|stop-color)="(#[0-9a-fA-F]{3,8}|rgb\([^)]+\))"/g
-  const counts: Record<string, number> = {}
-  let match
-
-  while ((match = colorRegex.exec(svgText)) !== null) {
-    const color = match[1]
-    counts[color] = (counts[color] || 0) + 1
-  }
+  const counts = collectColors(svgText)
 
   return Object.entries(counts)
     .sort(([, a], [, b]) => b - a)
     .map(([original, count], i) => ({
       original,
-      role: i === 0 ? 'skin' : i === 1 ? 'primary' : 'secondary',
+      role:  i === 0 ? 'skin' : i === 1 ? 'primary' : 'secondary',
       label: i === 0 ? 'Principal' : i === 1 ? 'Secundario' : 'Detalle',
       count,
     }))
