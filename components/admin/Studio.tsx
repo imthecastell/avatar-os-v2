@@ -69,9 +69,8 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [avatarState, setAvatarState]   = useState<AvatarState>(() =>
     buildDefaultState(firstCollId, initialLayers, assets)
   )
-  const [dragIdx, setDragIdx]           = useState<number | null>(null)
-  const [touchDragIdx, setTouchDragIdx] = useState<number | null>(null)
-  const [touchOverIdx, setTouchOverIdx] = useState<number | null>(null)
+  const [dragFrom, setDragFrom]         = useState<number | null>(null)
+  const [dragOver, setDragOver]         = useState<number | null>(null)
   const [saving, setSaving]             = useState(false)
   const [uploading, setUploading]       = useState(false)
   const [uploadLog, setUploadLog]       = useState<string[]>([])
@@ -83,10 +82,11 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set())
   const [transformOverrides, setTransformOverrides] = useState<Record<string, AssetTransform>>({})
 
-  const fileRef         = useRef<HTMLInputElement>(null)
-  const layerListRef    = useRef<HTMLDivElement>(null)
-  const touchDragRef    = useRef<number | null>(null)
-  const touchOverRef    = useRef<number | null>(null)
+  const fileRef       = useRef<HTMLInputElement>(null)
+  const layerListRef  = useRef<HTMLDivElement>(null)
+  const dragFromRef   = useRef<number | null>(null)
+  const dragOverRef   = useRef<number | null>(null)
+  const hasDraggedRef = useRef(false)
 
   // Derive filtered lists
   const collLayers   = layers.filter(l => !collectionId || l.collectionId === collectionId)
@@ -106,75 +106,45 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     transformOverrides[a.id] ? { ...a, transform: transformOverrides[a.id] } : a
   )
 
-  // Keep refs in sync so the non-React touchmove listener can read them
-  useEffect(() => { touchDragRef.current = touchDragIdx }, [touchDragIdx])
-  useEffect(() => { touchOverRef.current = touchOverIdx }, [touchOverIdx])
+  // ── Pointer-based drag (works on mouse + touch) ──────
+  function onLayerPointerDown(e: React.PointerEvent<HTMLDivElement>, i: number) {
+    if (collLayers[i]?.locked) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    hasDraggedRef.current = false
+    dragFromRef.current   = i
+    dragOverRef.current   = i
+    setDragFrom(i)
+    setDragOver(i)
+  }
 
-  // Non-passive touchmove so we can preventDefault and block scroll during drag
-  useEffect(() => {
-    const el = layerListRef.current
-    if (!el) return
-    const handler = (e: TouchEvent) => {
-      if (touchDragRef.current === null) return
-      e.preventDefault()
-      const touch = e.touches[0]
-      const items = el.querySelectorAll<HTMLElement>('[data-touch-idx]')
-      for (const item of items) {
-        const rect = item.getBoundingClientRect()
-        if (touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
-          const idx = parseInt(item.dataset.touchIdx ?? '-1')
-          if (idx >= 0) setTouchOverIdx(idx)
-          break
+  function onLayerPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (dragFromRef.current === null) return
+    hasDraggedRef.current = true
+    const items = layerListRef.current?.querySelectorAll<HTMLElement>('[data-layer-idx]')
+    if (!items) return
+    for (const item of items) {
+      const rect = item.getBoundingClientRect()
+      if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        const idx = parseInt(item.dataset.layerIdx ?? '-1')
+        if (idx >= 0 && idx !== dragOverRef.current) {
+          dragOverRef.current = idx
+          setDragOver(idx)
         }
+        break
       }
     }
-    el.addEventListener('touchmove', handler, { passive: false })
-    return () => el.removeEventListener('touchmove', handler)
-  }, [])
-
-  // ── Drag & drop layer reorder ─────────────────────────
-  function onDragStart(i: number) {
-    if (collLayers[i]?.locked) return
-    setDragIdx(i)
   }
 
-  function onDragOver(e: React.DragEvent, i: number) {
-    e.preventDefault()
-    if (dragIdx === null || dragIdx === i || collLayers[i]?.locked) return
-    const next = [...layers]
-    const globalFrom = layers.indexOf(collLayers[dragIdx])
-    const globalTo   = layers.indexOf(collLayers[i])
-    const [moved] = next.splice(globalFrom, 1)
-    next.splice(globalTo, 0, moved)
-    setLayers(next)
-    setDragIdx(i)
-  }
-
-  async function onDragEnd() {
-    setDragIdx(null)
-    setSaving(true)
-    for (let i = 0; i < layers.length; i++) {
-      await fetch('/api/layers', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: layers[i].id, order_index: i }),
-      })
-    }
-    setSaving(false)
-  }
-
-  // ── Touch drag layer reorder ──────────────────────────
-  function onLayerTouchStart(i: number) {
-    if (collLayers[i]?.locked) return
-    setTouchDragIdx(i)
-    setTouchOverIdx(i)
-  }
-
-  async function onLayerTouchEnd() {
-    const from = touchDragRef.current
-    const to   = touchOverRef.current
-    setTouchDragIdx(null)
-    setTouchOverIdx(null)
+  async function onLayerPointerUp(e: React.PointerEvent<HTMLDivElement>, i: number) {
+    const from    = dragFromRef.current
+    const to      = dragOverRef.current
+    const dragged = hasDraggedRef.current
+    dragFromRef.current   = null
+    dragOverRef.current   = null
+    hasDraggedRef.current = false
+    setDragFrom(null)
+    setDragOver(null)
+    if (!dragged) { setSelectedKey(collLayers[i].layerKey); return }
     if (from === null || to === null || from === to) return
     const nextLayers = [...layers]
     const globalFrom = layers.indexOf(collLayers[from])
@@ -395,30 +365,29 @@ export default function Studio({ collections, layers: initialLayers, assets, key
             const lmeta      = LAYER_META[layer.layerKey] ?? { emoji: '📁', accent: '#6b7280' }
             const count      = assets.filter(a => a.collectionId === collectionId && a.layerKey === layer.layerKey).length
             const hasWarn    = assets.some(a => a.collectionId === collectionId && a.layerKey === layer.layerKey && a.fileType === 'svg' && !a.svgEditable)
-            const isActive   = selectedKey === layer.layerKey
-            const isDrag     = dragIdx === i || touchDragIdx === i
-            const isTouchTarget = touchDragIdx !== null && touchDragIdx !== i && touchOverIdx === i
+            const isActive  = selectedKey === layer.layerKey
+            const isDragged = dragFrom === i
+            const isTarget  = dragFrom !== null && dragFrom !== i && dragOver === i
 
             return (
               <div
                 key={layer.id}
-                data-touch-idx={String(i)}
-                draggable={!layer.locked}
-                onDragStart={() => onDragStart(i)}
-                onDragOver={e => onDragOver(e, i)}
-                onDragEnd={onDragEnd}
-                onTouchStart={() => onLayerTouchStart(i)}
-                onTouchEnd={onLayerTouchEnd}
-                onClick={() => setSelectedKey(layer.layerKey)}
-                className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl cursor-grab select-none transition-all group/layer"
+                data-layer-idx={String(i)}
+                onPointerDown={e => onLayerPointerDown(e, i)}
+                onPointerMove={onLayerPointerMove}
+                onPointerUp={e => onLayerPointerUp(e, i)}
+                onPointerCancel={() => { dragFromRef.current = null; setDragFrom(null); setDragOver(null) }}
+                className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl select-none transition-all group/layer"
                 style={{
-                  background: isTouchTarget ? `${lmeta.accent}20` : isActive ? 'rgba(255,255,255,0.07)' : 'transparent',
-                  opacity: isDrag ? 0.35 : 1,
-                  transform: isDrag ? 'scale(0.95)' : undefined,
-                  border: isTouchTarget ? `1px solid ${lmeta.accent}60` : '1px solid transparent',
+                  background: isTarget ? `${lmeta.accent}20` : isActive ? 'rgba(255,255,255,0.07)' : 'transparent',
+                  opacity:    isDragged ? 0.35 : 1,
+                  transform:  isDragged ? 'scale(0.95)' : undefined,
+                  border:     isTarget  ? `1px solid ${lmeta.accent}60` : '1px solid transparent',
+                  cursor:     layer.locked ? 'default' : 'grab',
+                  touchAction: dragFrom !== null ? 'none' : 'auto',
                 }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.04)' }}
-                onMouseLeave={e => { if (!isActive && !isTouchTarget) (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+                onMouseEnter={e => { if (!isActive && !isTarget) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.04)' }}
+                onMouseLeave={e => { if (!isActive && !isTarget) (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
               >
                 <div className="w-0.5 h-5 rounded-full shrink-0 transition-all duration-200" style={{ background: isActive ? lmeta.accent : 'transparent' }} />
                 <span className="text-sm leading-none">{lmeta.emoji}</span>
