@@ -15,6 +15,7 @@ const LAYER_META: Record<string, { emoji: string; accent: string }> = {
   'emotion':      { emoji: '😄', accent: '#f59e0b' },
   'hair-back':    { emoji: '💇', accent: '#d97706' },
   'head':         { emoji: '🧑', accent: '#f43f5e' },
+  'body':         { emoji: '🫁', accent: '#f43f5e' },
   'shirt':        { emoji: '👕', accent: '#3b82f6' },
   'hair-front':   { emoji: '✂️', accent: '#d97706' },
   'acc-front':    { emoji: '🎩', accent: '#8b5cf6' },
@@ -22,6 +23,12 @@ const LAYER_META: Record<string, { emoji: string; accent: string }> = {
   'effect-final': { emoji: '✨', accent: '#a78bfa' },
   'frame':        { emoji: '🖼️', accent: '#10b981' },
 }
+
+const COLOR_TOKENS = [
+  { id: null,         label: '—',       title: 'Sin token de color' },
+  { id: 'skin-color', label: '🧑 Piel', title: 'Tono de piel' },
+  { id: 'hair-color', label: '💇 Pelo', title: 'Color de cabello' },
+]
 
 const SKIN_TONES = [
   '#FDDBB4','#F9C7B6','#EBA882','#D4895A','#B86A35','#8B4513','#5C2D0A','#3B1A08',
@@ -183,6 +190,15 @@ export default function Studio({ collections, layers: initialLayers, assets, key
       })
     }
     setSaving(false)
+  }
+
+  // ── Layer property update ────────────────────────────
+  async function updateColorToken(layerId: string, token: string | null) {
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, colorToken: token } : l))
+    await fetch('/api/layers', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: layerId, color_token: token }),
+    })
   }
 
   // ── Avatar mutations ──────────────────────────────────
@@ -432,6 +448,35 @@ export default function Studio({ collections, layers: initialLayers, assets, key
             )
           })}
         </div>
+
+        {/* Color token selector — shown when a layer is selected */}
+        {selectedLayer && (
+          <div className="px-3 pb-2 border-t pt-3 shrink-0 space-y-1.5" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+            <p className="text-[9px] font-semibold uppercase tracking-widest px-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
+              Token de color
+            </p>
+            <div className="flex gap-1.5">
+              {COLOR_TOKENS.map(tok => {
+                const active = selectedLayer.colorToken === tok.id
+                return (
+                  <button
+                    key={String(tok.id)}
+                    onClick={() => updateColorToken(selectedLayer.id, tok.id)}
+                    title={tok.title}
+                    className="flex-1 text-[10px] font-semibold py-1.5 rounded-lg transition-all"
+                    style={{
+                      background: active ? 'rgba(124,58,237,0.6)' : 'rgba(255,255,255,0.05)',
+                      color:      active ? 'white' : 'rgba(255,255,255,0.35)',
+                      outline:    active ? '1px solid rgba(124,58,237,0.8)' : 'none',
+                    }}
+                  >
+                    {tok.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="p-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
           <p className="text-[9px] text-center" style={{ color: 'rgba(255,255,255,0.15)' }}>
