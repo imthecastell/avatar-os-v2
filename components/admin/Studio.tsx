@@ -73,7 +73,6 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [selectionMode, setSelectionMode]       = useState(false)
   const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set())
   const [transformOverrides, setTransformOverrides] = useState<Record<string, AssetTransform>>({})
-  const [savingTransform, setSavingTransform]   = useState(false)
 
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -89,7 +88,6 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const activeTransform: AssetTransform = activeAssetId
     ? (transformOverrides[activeAssetId] ?? activeAsset?.transform ?? { scale: 1, offsetX: 0, offsetY: 0 })
     : { scale: 1, offsetX: 0, offsetY: 0 }
-  const transformDirty = activeAssetId ? !!transformOverrides[activeAssetId] : false
 
   // Merge transform overrides into assets array for live canvas preview
   const canvasAssets = assets.map(a =>
@@ -231,19 +229,6 @@ export default function Studio({ collections, layers: initialLayers, assets, key
       ...prev,
       [activeAssetId]: { ...activeTransform, [key]: val },
     }))
-  }
-
-  async function saveTransform() {
-    if (!activeAssetId || !transformOverrides[activeAssetId]) return
-    setSavingTransform(true)
-    await fetch('/api/assets', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: activeAssetId, transform: transformOverrides[activeAssetId] }),
-    })
-    setSavingTransform(false)
-    // clear override — DB now has the value
-    setTransformOverrides(prev => { const n = { ...prev }; delete n[activeAssetId]; return n })
   }
 
   function resetTransform() {
@@ -818,16 +803,6 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                   onChange={v => updateTransform('offsetY', v)}
                 />
 
-                {transformDirty && (
-                  <button
-                    onClick={saveTransform}
-                    disabled={savingTransform}
-                    className="w-full text-xs font-semibold py-2 rounded-xl transition-all disabled:opacity-50"
-                    style={{ background: 'rgba(124,58,237,0.8)', color: 'white' }}
-                  >
-                    {savingTransform ? 'Guardando…' : '💾 Guardar escala'}
-                  </button>
-                )}
               </div>
             )}
           </div>

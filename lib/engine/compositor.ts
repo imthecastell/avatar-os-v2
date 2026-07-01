@@ -63,26 +63,22 @@ export class AvatarCompositor {
 
     const bitmap = await this.getBitmap(asset, layer, tokens)
     const { scale, offsetX, offsetY } = asset.transform
-    const size = this.size * scale
-    const x    = (this.size - size) / 2 + offsetX
-    const y    = (this.size - size) / 2 + offsetY
-    ctx.drawImage(bitmap, x, y, size, size)
+    const [sw, sh] = this.fitDims(bitmap, scale)
+    const x = (this.size - sw) / 2 + offsetX
+    const y = (this.size - sh) / 2 + offsetY
+    ctx.drawImage(bitmap, x, y, sw, sh)
 
-    // 2. Draw the mask shape with destination-out onto a hair-layer offscreen
-    //    and composite the masked hair onto main canvas first
-    // (Hair layers have already been drawn before this asset in layer order —
-    //  masking post-hoc is complex; instead we erase from main canvas)
     const maskBitmap = await this.getBitmap(maskAsset, layer, tokens)
     this.ctx.globalCompositeOperation = 'destination-out'
-    const ms = this.size * (maskAsset.transform?.scale ?? 1)
-    const mx = (this.size - ms) / 2 + (maskAsset.transform?.offsetX ?? 0)
-    const my = (this.size - ms) / 2 + (maskAsset.transform?.offsetY ?? 0)
-    this.ctx.drawImage(maskBitmap, mx, my, ms, ms)
+    const ms = maskAsset.transform?.scale ?? 1
+    const [mw, mh] = this.fitDims(maskBitmap, ms)
+    const mx = (this.size - mw) / 2 + (maskAsset.transform?.offsetX ?? 0)
+    const my = (this.size - mh) / 2 + (maskAsset.transform?.offsetY ?? 0)
+    this.ctx.drawImage(maskBitmap, mx, my, mw, mh)
     this.ctx.globalCompositeOperation = 'source-over'
 
-    // 3. Draw the asset itself on top
     this.ctx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation
-    this.ctx.drawImage(bitmap, x, y, size, size)
+    this.ctx.drawImage(bitmap, x, y, sw, sh)
     this.ctx.globalCompositeOperation = 'source-over'
   }
 
@@ -90,10 +86,20 @@ export class AvatarCompositor {
   private async drawAsset(asset: Asset, layer: Layer, tokens: AvatarState['tokens']) {
     const bitmap = await this.getBitmap(asset, layer, tokens)
     const { scale = 1, offsetX = 0, offsetY = 0 } = asset.transform ?? {}
-    const size = this.size * scale
-    const x    = (this.size - size) / 2 + offsetX
-    const y    = (this.size - size) / 2 + offsetY
-    this.ctx.drawImage(bitmap, x, y, size, size)
+    const [w, h] = this.fitDims(bitmap, scale)
+    const x = (this.size - w) / 2 + offsetX
+    const y = (this.size - h) / 2 + offsetY
+    this.ctx.drawImage(bitmap, x, y, w, h)
+  }
+
+  // contain-fit: largest side fills this.size * scale, aspect ratio preserved
+  private fitDims(bitmap: ImageBitmap, scale: number): [number, number] {
+    if (bitmap.width === bitmap.height) {
+      const s = this.size * scale
+      return [s, s]
+    }
+    const fit = (this.size * scale) / Math.max(bitmap.width, bitmap.height)
+    return [bitmap.width * fit, bitmap.height * fit]
   }
 
   // ── Get or build a cached ImageBitmap for any asset ───────────────────
@@ -148,15 +154,9 @@ export class AvatarCompositor {
   }
 
   private async buildImageBitmap(asset: Asset): Promise<ImageBitmap> {
-    const res    = await fetch(asset.cdnUrl)
-    const blob   = await res.blob()
-    const raw    = await createImageBitmap(blob)
-    const oc     = new OffscreenCanvas(this.size, this.size)
-    const ctx    = oc.getContext('2d')!
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(raw, 0, 0, this.size, this.size)
-    return createImageBitmap(oc)
+    const res  = await fetch(asset.cdnUrl)
+    const blob = await res.blob()
+    return createImageBitmap(blob)   // natural resolution — drawAsset handles scaling
   }
 
   private recolorSVG(svg: string, fromColor: string, toHex: string): string {
