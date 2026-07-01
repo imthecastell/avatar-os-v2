@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import type { Layer, Asset, Collection, AvatarState, Keyword } from '@/types'
 import AssetInspector from '@/components/admin/AssetInspector'
-import BatchUploader  from '@/components/admin/BatchUploader'
+import SmartBatchUploader from '@/components/admin/SmartBatchUploader'
 
 const AvatarCanvas = dynamic(() => import('@/components/builder/AvatarCanvas'), { ssr: false })
 
@@ -70,6 +70,8 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [inspecting, setInspecting]     = useState<Asset | null>(null)
   const [centerMode, setCenterMode]     = useState<'assets' | 'batch'>('assets')
   const [dropOver, setDropOver]         = useState(false)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds]     = useState<Set<string>>(new Set())
 
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -174,6 +176,33 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     window.location.reload()
   }
 
+  function toggleSelectAsset(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  async function deleteSelected() {
+    if (!confirm(`¿Eliminar ${selectedIds.size} asset(s) seleccionados?`)) return
+    await fetch('/api/assets', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedIds) }),
+    })
+    setSelectedIds(new Set())
+    setSelectionMode(false)
+    window.location.reload()
+  }
+
+  async function deleteLayer(layerId: string, layerKey: string, labelEs: string) {
+    const count = assets.filter(a => a.layerKey === layerKey).length
+    if (!confirm(`¿Eliminar la capa "${labelEs}" y sus ${count} asset(s)?`)) return
+    await fetch(`/api/layers?id=${layerId}&layerKey=${layerKey}&collectionId=${collectionId}`, { method: 'DELETE' })
+    window.location.reload()
+  }
+
   async function deleteAsset(assetId: string) {
     if (!confirm('¿Eliminar este asset?')) return
     await fetch(`/api/assets?id=${assetId}`, { method: 'DELETE' })
@@ -271,7 +300,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                 onDragOver={e => onDragOver(e, i)}
                 onDragEnd={onDragEnd}
                 onClick={() => setSelectedKey(layer.layerKey)}
-                className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl cursor-pointer select-none transition-all"
+                className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl cursor-pointer select-none transition-all group/layer"
                 style={{
                   background: isActive ? 'rgba(255,255,255,0.07)' : 'transparent',
                   opacity: isDrag ? 0.4 : 1,
@@ -280,32 +309,28 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                 onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.04)' }}
                 onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
               >
-                {/* Accent stripe */}
-                <div
-                  className="w-0.5 h-5 rounded-full shrink-0 transition-all duration-200"
-                  style={{ background: isActive ? lmeta.accent : 'transparent' }}
-                />
-
+                <div className="w-0.5 h-5 rounded-full shrink-0 transition-all duration-200" style={{ background: isActive ? lmeta.accent : 'transparent' }} />
                 <span className="text-sm leading-none">{lmeta.emoji}</span>
-
                 <p className="flex-1 min-w-0 text-xs font-medium truncate transition-colors" style={{ color: isActive ? 'white' : 'rgba(255,255,255,0.5)' }}>
                   {layer.labelEs}
                 </p>
-
-                <span
-                  className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 tabular-nums"
-                  style={{
-                    background: count > 0
-                      ? isActive ? `${lmeta.accent}30` : 'rgba(255,255,255,0.07)'
-                      : 'transparent',
-                    color: count > 0
-                      ? isActive ? lmeta.accent : 'rgba(255,255,255,0.22)'
-                      : 'rgba(255,255,255,0.1)',
-                  }}
-                >
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 tabular-nums group-hover/layer:hidden" style={{
+                  background: count > 0 ? isActive ? `${lmeta.accent}30` : 'rgba(255,255,255,0.07)' : 'transparent',
+                  color: count > 0 ? isActive ? lmeta.accent : 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)',
+                }}>
                   {count}
                 </span>
-
+                {/* Delete layer button — visible on hover */}
+                <button
+                  onClick={e => { e.stopPropagation(); deleteLayer(layer.id, layer.layerKey, layer.labelEs) }}
+                  className="hidden group-hover/layer:flex w-5 h-5 shrink-0 items-center justify-center rounded-lg text-[9px] transition-colors"
+                  style={{ color: 'rgba(255,255,255,0.25)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#fca5a5')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.25)')}
+                  title={`Eliminar capa "${layer.labelEs}"`}
+                >
+                  🗑
+                </button>
                 {hasWarn && <span className="text-yellow-500 text-[9px] shrink-0">⚠</span>}
                 {layer.locked && <span className="text-[9px] shrink-0" style={{ color: 'rgba(255,255,255,0.15)' }}>🔒</span>}
               </div>
@@ -374,8 +399,63 @@ export default function Studio({ collections, layers: initialLayers, assets, key
 
           <div className="flex-1" />
 
-          {/* Upload button — assets mode only */}
-          {centerMode === 'assets' && (
+          {/* Assets mode controls */}
+          {centerMode === 'assets' && layerAssets.length > 0 && (
+            <div className="flex items-center self-center gap-2 mr-4">
+              {selectionMode ? (
+                <>
+                  <button
+                    onClick={() => setSelectedIds(new Set(layerAssets.map(a => a.id)))}
+                    className="text-[10px] px-2 py-1 rounded-lg"
+                    style={{ color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.06)' }}
+                  >
+                    Todo
+                  </button>
+                  {selectedIds.size > 0 && (
+                    <button
+                      onClick={deleteSelected}
+                      className="text-[10px] font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1.5"
+                      style={{ background: 'rgba(185,28,28,0.85)', color: 'white' }}
+                    >
+                      🗑 Eliminar {selectedIds.size}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setSelectionMode(false); setSelectedIds(new Set()) }}
+                    className="text-[10px] px-2 py-1 rounded-lg"
+                    style={{ color: 'rgba(255,255,255,0.35)' }}
+                  >
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setSelectionMode(true); setCenterMode('assets') }}
+                    className="text-[10px] font-medium px-2.5 py-1.5 rounded-xl transition-all"
+                    style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)' }}
+                  >
+                    Seleccionar
+                  </button>
+                  <label
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl cursor-pointer transition-all shrink-0"
+                    style={{ background: 'rgba(139,92,246,0.9)', color: 'white' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,237,1)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'rgba(139,92,246,0.9)')}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Subir
+                    <input ref={fileRef} type="file" multiple accept=".svg,.png,.jpg,.jpeg" className="hidden" onChange={e => handleUpload(e.target.files)} />
+                  </label>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Upload button when no assets */}
+          {centerMode === 'assets' && layerAssets.length === 0 && (
             <label
               className="flex items-center self-center mr-4 gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl cursor-pointer transition-all shrink-0"
               style={{ background: 'rgba(139,92,246,0.9)', color: 'white' }}
@@ -386,14 +466,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
               </svg>
               Subir
-              <input
-                ref={fileRef}
-                type="file"
-                multiple
-                accept=".svg,.png,.jpg,.jpeg"
-                className="hidden"
-                onChange={e => handleUpload(e.target.files)}
-              />
+              <input ref={fileRef} type="file" multiple accept=".svg,.png,.jpg,.jpeg" className="hidden" onChange={e => handleUpload(e.target.files)} />
             </label>
           )}
         </div>
@@ -407,12 +480,11 @@ export default function Studio({ collections, layers: initialLayers, assets, key
           </div>
         )}
 
-        {/* Batch uploader */}
+        {/* Smart batch uploader */}
         {centerMode === 'batch' && (
-          <BatchUploader
+          <SmartBatchUploader
             collections={collections}
             layers={collLayers}
-            keywords={keywords}
             onDone={() => window.location.reload()}
           />
         )}
@@ -461,17 +533,18 @@ export default function Studio({ collections, layers: initialLayers, assets, key
               </button>
 
               {layerAssets.map(asset => {
-                const isActive = avatarState.selectedAssets[selectedKey] === asset.id
+                const isActive   = avatarState.selectedAssets[selectedKey] === asset.id
+                const isSelected = selectedIds.has(asset.id)
                 return (
                   <div key={asset.id} className="relative aspect-square group">
                     <button
-                      onClick={() => selectAsset(selectedKey, asset.id)}
+                      onClick={() => selectionMode ? toggleSelectAsset(asset.id) : selectAsset(selectedKey, asset.id)}
                       className="w-full h-full rounded-2xl overflow-hidden transition-all"
                       style={{
-                        border: `2px solid ${isActive ? meta.accent : 'rgba(255,255,255,0.08)'}`,
-                        background: 'rgba(255,255,255,0.03)',
-                        transform: isActive ? 'scale(1.04)' : undefined,
-                        boxShadow: isActive ? `0 0 20px ${meta.accent}40` : undefined,
+                        border: `2px solid ${selectionMode ? (isSelected ? '#ef4444' : 'rgba(255,255,255,0.08)') : isActive ? meta.accent : 'rgba(255,255,255,0.08)'}`,
+                        background: selectionMode && isSelected ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.03)',
+                        transform: isActive && !selectionMode ? 'scale(1.04)' : undefined,
+                        boxShadow: isActive && !selectionMode ? `0 0 20px ${meta.accent}40` : undefined,
                       }}
                     >
                       {asset.cdnUrl ? (
@@ -489,8 +562,20 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                       )}
                     </button>
 
+                    {/* Selection checkbox */}
+                    {selectionMode && (
+                      <span className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center border-2 transition-all"
+                        style={{
+                          background: isSelected ? '#ef4444' : 'rgba(0,0,0,0.5)',
+                          borderColor: isSelected ? '#ef4444' : 'rgba(255,255,255,0.3)',
+                        }}
+                      >
+                        {isSelected && <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
+                      </span>
+                    )}
+
                     {/* Default badge */}
-                    {asset.isDefault && (
+                    {asset.isDefault && !selectionMode && (
                       <span className="absolute top-1 left-1 text-white text-[8px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(139,92,246,1)', lineHeight: 1.5 }}>
                         default
                       </span>
@@ -510,8 +595,8 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                       </span>
                     )}
 
-                    {/* Hover overlay */}
-                    <div className="absolute inset-0 rounded-2xl flex flex-col items-stretch justify-end p-1.5 gap-1 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: 'rgba(0,0,0,0.75)' }}>
+                    {/* Hover overlay — hidden in selection mode */}
+                    <div className={`absolute inset-0 rounded-2xl flex flex-col items-stretch justify-end p-1.5 gap-1 transition-opacity ${selectionMode ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'}`} style={{ background: 'rgba(0,0,0,0.75)' }}>
                       <p className="text-[9px] font-medium text-center truncate px-1 pb-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>
                         {asset.name}
                       </p>

@@ -30,6 +30,27 @@ export async function PUT(request: NextRequest) {
   return NextResponse.json(data)
 }
 
+export async function DELETE(request: NextRequest) {
+  const supabase = createAdminClient()
+  const { searchParams } = new URL(request.url)
+  const id        = searchParams.get('id')
+  const layerKey  = searchParams.get('layerKey')
+  const collId    = searchParams.get('collectionId')
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+
+  // Delete all assets belonging to this layer first
+  if (layerKey && collId) {
+    await supabase.from('assets')
+      .delete()
+      .eq('layer_key', layerKey)
+      .eq('collection_id', collId)
+  }
+
+  const { error } = await supabase.from('layers').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
 export async function POST(request: NextRequest) {
   const sessionClient = await createClient()
   const { data: { user } } = await sessionClient.auth.getUser()

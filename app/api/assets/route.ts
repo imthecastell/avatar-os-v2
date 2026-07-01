@@ -43,10 +43,21 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const supabase = createAdminClient()
   const { searchParams } = new URL(request.url)
-  const id = searchParams.get('id')
-  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+  const singleId = searchParams.get('id')
 
-  const { error } = await supabase.from('assets').delete().eq('id', id)
+  // Single delete via query param (legacy)
+  if (singleId) {
+    const { error } = await supabase.from('assets').delete().eq('id', singleId)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  }
+
+  // Bulk delete via JSON body: { ids: string[] }
+  const body = await request.json().catch(() => ({}))
+  const ids: string[] = body.ids ?? []
+  if (!ids.length) return NextResponse.json({ error: 'Missing id or ids' }, { status: 400 })
+
+  const { error } = await supabase.from('assets').delete().in('id', ids)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, deleted: ids.length })
 }
