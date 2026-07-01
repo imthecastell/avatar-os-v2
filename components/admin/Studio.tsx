@@ -35,7 +35,7 @@ const LAYER_KEYS = Object.keys(LAYER_META)
 function buildDefaultState(collectionId: string, layers: Layer[], assets: Asset[]): AvatarState {
   const selectedAssets: Record<string, string | null> = {}
   for (const layer of layers) {
-    const def = assets.find(a => a.layerKey === layer.layerKey && a.isDefault)
+    const def = assets.find(a => a.collectionId === collectionId && a.layerKey === layer.layerKey && a.isDefault)
     selectedAssets[layer.layerKey] = def?.id ?? null
   }
   return {
@@ -77,7 +77,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
 
   // Derive filtered lists
   const collLayers   = layers.filter(l => !collectionId || l.collectionId === collectionId)
-  const layerAssets  = assets.filter(a => a.layerKey === selectedKey)
+  const layerAssets  = assets.filter(a => a.collectionId === collectionId && a.layerKey === selectedKey)
   const selectedLayer = collLayers.find(l => l.layerKey === selectedKey)
   const meta          = LAYER_META[selectedKey] ?? { emoji: '📁', accent: '#6b7280' }
 
@@ -128,7 +128,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   function randomize() {
     const sel: Record<string, string | null> = {}
     for (const layer of collLayers) {
-      const opts = assets.filter(a => a.layerKey === layer.layerKey)
+      const opts = assets.filter(a => a.collectionId === collectionId && a.layerKey === layer.layerKey)
       sel[layer.layerKey] = opts.length ? opts[Math.floor(Math.random() * opts.length)].id : null
     }
     setAvatarState(s => ({ ...s, selectedAssets: sel }))
@@ -197,7 +197,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   }
 
   async function deleteLayer(layerId: string, layerKey: string, labelEs: string) {
-    const count = assets.filter(a => a.layerKey === layerKey).length
+    const count = assets.filter(a => a.collectionId === collectionId && a.layerKey === layerKey).length
     if (!confirm(`¿Eliminar la capa "${labelEs}" y sus ${count} asset(s)?`)) return
     await fetch(`/api/layers?id=${layerId}&layerKey=${layerKey}&collectionId=${collectionId}`, { method: 'DELETE' })
     window.location.reload()
@@ -287,8 +287,8 @@ export default function Studio({ collections, layers: initialLayers, assets, key
         <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
           {collLayers.map((layer, i) => {
             const lmeta    = LAYER_META[layer.layerKey] ?? { emoji: '📁', accent: '#6b7280' }
-            const count    = assets.filter(a => a.layerKey === layer.layerKey).length
-            const hasWarn  = assets.some(a => a.layerKey === layer.layerKey && a.fileType === 'svg' && !a.svgEditable)
+            const count    = assets.filter(a => a.collectionId === collectionId && a.layerKey === layer.layerKey).length
+            const hasWarn  = assets.some(a => a.collectionId === collectionId && a.layerKey === layer.layerKey && a.fileType === 'svg' && !a.svgEditable)
             const isActive = selectedKey === layer.layerKey
             const isDrag   = dragIdx === i
 
