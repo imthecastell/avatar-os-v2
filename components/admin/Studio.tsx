@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import type { Layer, Asset, Collection, AvatarState, Keyword, AssetTransform } from '@/types'
@@ -63,6 +63,8 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     buildDefaultState(firstCollId, initialLayers, assets)
   )
   const [dragIdx, setDragIdx]           = useState<number | null>(null)
+  const [touchDragIdx, setTouchDragIdx] = useState<number | null>(null)
+  const [touchOverIdx, setTouchOverIdx] = useState<number | null>(null)
   const [saving, setSaving]             = useState(false)
   const [uploading, setUploading]       = useState(false)
   const [uploadLog, setUploadLog]       = useState<string[]>([])
@@ -74,7 +76,10 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set())
   const [transformOverrides, setTransformOverrides] = useState<Record<string, AssetTransform>>({})
 
-  const fileRef = useRef<HTMLInputElement>(null)
+  const fileRef         = useRef<HTMLInputElement>(null)
+  const layerListRef    = useRef<HTMLDivElement>(null)
+  const touchDragRef    = useRef<number | null>(null)
+  const touchOverRef    = useRef<number | null>(null)
 
   // Derive filtered lists
   const collLayers   = layers.filter(l => !collectionId || l.collectionId === collectionId)
@@ -93,6 +98,32 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const canvasAssets = assets.map(a =>
     transformOverrides[a.id] ? { ...a, transform: transformOverrides[a.id] } : a
   )
+
+  // Keep refs in sync so the non-React touchmove listener can read them
+  useEffect(() => { touchDragRef.current = touchDragIdx }, [touchDragIdx])
+  useEffect(() => { touchOverRef.current = touchOverIdx }, [touchOverIdx])
+
+  // Non-passive touchmove so we can preventDefault and block scroll during drag
+  useEffect(() => {
+    const el = layerListRef.current
+    if (!el) return
+    const handler = (e: TouchEvent) => {
+      if (touchDragRef.current === null) return
+      e.preventDefault()
+      const touch = e.touches[0]
+      const items = el.querySelectorAll<HTMLElement>('[data-touch-idx]')
+      for (const item of items) {
+        const rect = item.getBoundingClientRect()
+        if (touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+          const idx = parseInt(item.dataset.touchIdx ?? '-1')
+          if (idx >= 0) setTouchOverIdx(idx)
+          break
+        }
+      }
+    }
+    el.addEventListener('touchmove', handler, { passive: false })
+    return () => el.removeEventListener('touchmove', handler)
+  }, [])
 
   // ── Drag & drop layer reorder ─────────────────────────
   function onDragStart(i: number) {
@@ -125,30 +156,32 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     setSaving(false)
   }
 
-  // ── Move layer up/down (touch-friendly) ───────────────
-  async function moveLayer(collIdx: number, dir: 'up' | 'down') {
-    const toCollIdx = dir === 'up' ? collIdx - 1 : collIdx + 1
-    if (toCollIdx < 0 || toCollIdx >= collLayers.length) return
-    if (collLayers[toCollIdx]?.locked) return
+  // ── Touch drag layer reorder ──────────────────────────
+  function onLayerTouchStart(i: number) {
+    if (collLayers[i]?.locked) return
+    setTouchDragIdx(i)
+    setTouchOverIdx(i)
+  }
 
-    const globalFrom = layers.indexOf(collLayers[collIdx])
-    const globalTo   = layers.indexOf(collLayers[toCollIdx])
-
-    const next = [...layers]
-    ;[next[globalFrom], next[globalTo]] = [next[globalTo], next[globalFrom]]
-    setLayers(next)
-
+  async function onLayerTouchEnd() {
+    const from = touchDragRef.current
+    const to   = touchOverRef.current
+    setTouchDragIdx(null)
+    setTouchOverIdx(null)
+    if (from === null || to === null || from === to) return
+    const nextLayers = [...layers]
+    const globalFrom = layers.indexOf(collLayers[from])
+    const globalTo   = layers.indexOf(collLayers[to])
+    const [moved] = nextLayers.splice(globalFrom, 1)
+    nextLayers.splice(globalTo, 0, moved)
+    setLayers(nextLayers)
     setSaving(true)
-    await Promise.all([
-      fetch('/api/layers', {
+    for (let idx = 0; idx < nextLayers.length; idx++) {
+      await fetch('/api/layers', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: next[globalFrom].id, order_index: globalFrom }),
-      }),
-      fetch('/api/layers', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: next[globalTo].id, order_index: globalTo }),
-      }),
-    ])
+        body: JSON.stringify({ id: nextLayers[idx].id, order_index: idx }),
+      })
+    }
     setSaving(false)
   }
 
@@ -341,30 +374,35 @@ export default function Studio({ collections, layers: initialLayers, assets, key
         )}
 
         {/* Layer list */}
-        <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
+        <div ref={layerListRef} className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
           {collLayers.map((layer, i) => {
-            const lmeta    = LAYER_META[layer.layerKey] ?? { emoji: '📁', accent: '#6b7280' }
-            const count    = assets.filter(a => a.collectionId === collectionId && a.layerKey === layer.layerKey).length
-            const hasWarn  = assets.some(a => a.collectionId === collectionId && a.layerKey === layer.layerKey && a.fileType === 'svg' && !a.svgEditable)
-            const isActive = selectedKey === layer.layerKey
-            const isDrag   = dragIdx === i
+            const lmeta      = LAYER_META[layer.layerKey] ?? { emoji: '📁', accent: '#6b7280' }
+            const count      = assets.filter(a => a.collectionId === collectionId && a.layerKey === layer.layerKey).length
+            const hasWarn    = assets.some(a => a.collectionId === collectionId && a.layerKey === layer.layerKey && a.fileType === 'svg' && !a.svgEditable)
+            const isActive   = selectedKey === layer.layerKey
+            const isDrag     = dragIdx === i || touchDragIdx === i
+            const isTouchTarget = touchDragIdx !== null && touchDragIdx !== i && touchOverIdx === i
 
             return (
               <div
                 key={layer.id}
+                data-touch-idx={String(i)}
                 draggable={!layer.locked}
                 onDragStart={() => onDragStart(i)}
                 onDragOver={e => onDragOver(e, i)}
                 onDragEnd={onDragEnd}
+                onTouchStart={() => onLayerTouchStart(i)}
+                onTouchEnd={onLayerTouchEnd}
                 onClick={() => setSelectedKey(layer.layerKey)}
-                className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl cursor-pointer select-none transition-all group/layer"
+                className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl cursor-grab select-none transition-all group/layer"
                 style={{
-                  background: isActive ? 'rgba(255,255,255,0.07)' : 'transparent',
-                  opacity: isDrag ? 0.4 : 1,
-                  transform: isDrag ? 'scale(0.96)' : undefined,
+                  background: isTouchTarget ? `${lmeta.accent}20` : isActive ? 'rgba(255,255,255,0.07)' : 'transparent',
+                  opacity: isDrag ? 0.35 : 1,
+                  transform: isDrag ? 'scale(0.95)' : undefined,
+                  border: isTouchTarget ? `1px solid ${lmeta.accent}60` : '1px solid transparent',
                 }}
                 onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.04)' }}
-                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+                onMouseLeave={e => { if (!isActive && !isTouchTarget) (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
               >
                 <div className="w-0.5 h-5 rounded-full shrink-0 transition-all duration-200" style={{ background: isActive ? lmeta.accent : 'transparent' }} />
                 <span className="text-sm leading-none">{lmeta.emoji}</span>
@@ -377,29 +415,6 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                 }}>
                   {count}
                 </span>
-                {/* Move up / down — always visible, touch-friendly */}
-                {!layer.locked && (
-                  <div className="flex flex-col shrink-0" style={{ gap: 1 }}>
-                    <button
-                      onClick={e => { e.stopPropagation(); moveLayer(i, 'up') }}
-                      disabled={i === 0}
-                      className="w-4 h-3.5 flex items-center justify-center rounded text-[8px] transition-colors disabled:opacity-20"
-                      style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.06)' }}
-                      onMouseEnter={e => (e.currentTarget.style.color = 'white')}
-                      onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.35)')}
-                      title="Subir capa"
-                    >▲</button>
-                    <button
-                      onClick={e => { e.stopPropagation(); moveLayer(i, 'down') }}
-                      disabled={i === collLayers.length - 1}
-                      className="w-4 h-3.5 flex items-center justify-center rounded text-[8px] transition-colors disabled:opacity-20"
-                      style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.06)' }}
-                      onMouseEnter={e => (e.currentTarget.style.color = 'white')}
-                      onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.35)')}
-                      title="Bajar capa"
-                    >▼</button>
-                  </div>
-                )}
                 {/* Delete layer button — visible on hover */}
                 <button
                   onClick={e => { e.stopPropagation(); deleteLayer(layer.id, layer.layerKey, layer.labelEs) }}
@@ -420,7 +435,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
 
         <div className="p-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
           <p className="text-[9px] text-center" style={{ color: 'rgba(255,255,255,0.15)' }}>
-            ▲ ▼ para reordenar
+            Arrastra para reordenar
           </p>
         </div>
       </aside>
