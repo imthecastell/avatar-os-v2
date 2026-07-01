@@ -399,75 +399,64 @@ export default function Studio({ collections, layers: initialLayers, assets, key
 
           <div className="flex-1" />
 
-          {/* Assets mode controls */}
-          {centerMode === 'assets' && layerAssets.length > 0 && (
-            <div className="flex items-center self-center gap-2 mr-4">
-              {selectionMode ? (
-                <>
-                  <button
-                    onClick={() => setSelectedIds(new Set(layerAssets.map(a => a.id)))}
-                    className="text-[10px] px-2 py-1 rounded-lg"
-                    style={{ color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.06)' }}
-                  >
-                    Todo
-                  </button>
-                  {selectedIds.size > 0 && (
-                    <button
-                      onClick={deleteSelected}
-                      className="text-[10px] font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1.5"
-                      style={{ background: 'rgba(185,28,28,0.85)', color: 'white' }}
-                    >
-                      🗑 Eliminar {selectedIds.size}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => { setSelectionMode(false); setSelectedIds(new Set()) }}
-                    className="text-[10px] px-2 py-1 rounded-lg"
-                    style={{ color: 'rgba(255,255,255,0.35)' }}
-                  >
-                    Cancelar
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => { setSelectionMode(true); setCenterMode('assets') }}
-                    className="text-[10px] font-medium px-2.5 py-1.5 rounded-xl transition-all"
-                    style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)' }}
-                  >
-                    Seleccionar
-                  </button>
-                  <label
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl cursor-pointer transition-all shrink-0"
-                    style={{ background: 'rgba(139,92,246,0.9)', color: 'white' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,237,1)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'rgba(139,92,246,0.9)')}
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Subir
-                    <input ref={fileRef} type="file" multiple accept=".svg,.png,.jpg,.jpeg" className="hidden" onChange={e => handleUpload(e.target.files)} />
-                  </label>
-                </>
+          {/* Upload button (always visible in assets mode) */}
+          {centerMode === 'assets' && !selectionMode && (
+            <div className="flex items-center self-center gap-2 mr-3">
+              {layerAssets.length > 0 && (
+                <button
+                  onClick={() => { setSelectionMode(true); setCenterMode('assets') }}
+                  className="flex items-center gap-1.5 text-[10px] font-medium px-2.5 py-1.5 rounded-xl transition-all shrink-0"
+                  style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.1)' }}
+                >
+                  <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                    <rect x="3" y="3" width="4" height="4" rx="1" /><rect x="10" y="3" width="4" height="4" rx="1" /><rect x="17" y="3" width="4" height="4" rx="1" />
+                    <rect x="3" y="10" width="4" height="4" rx="1" /><rect x="10" y="10" width="4" height="4" rx="1" /><rect x="17" y="10" width="4" height="4" rx="1" />
+                    <rect x="3" y="17" width="4" height="4" rx="1" /><rect x="10" y="17" width="4" height="4" rx="1" /><rect x="17" y="17" width="4" height="4" rx="1" />
+                  </svg>
+                  Editar
+                </button>
               )}
+              <label
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl cursor-pointer transition-all shrink-0"
+                style={{ background: 'rgba(139,92,246,0.9)', color: 'white' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,237,1)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(139,92,246,0.9)')}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
+                Subir
+                <input ref={fileRef} type="file" multiple accept=".svg,.png,.jpg,.jpeg" className="hidden" onChange={e => handleUpload(e.target.files)} />
+              </label>
             </div>
           )}
 
-          {/* Upload button when no assets */}
-          {centerMode === 'assets' && layerAssets.length === 0 && (
-            <label
-              className="flex items-center self-center mr-4 gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl cursor-pointer transition-all shrink-0"
-              style={{ background: 'rgba(139,92,246,0.9)', color: 'white' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,237,1)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(139,92,246,0.9)')}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-              </svg>
-              Subir
-              <input ref={fileRef} type="file" multiple accept=".svg,.png,.jpg,.jpeg" className="hidden" onChange={e => handleUpload(e.target.files)} />
-            </label>
+          {/* Selection mode controls */}
+          {centerMode === 'assets' && selectionMode && (
+            <div className="flex items-center self-center gap-2 mr-3">
+              <button
+                onClick={() => setSelectedIds(new Set(layerAssets.map(a => a.id)))}
+                className="text-[10px] font-medium px-2.5 py-1.5 rounded-xl transition-all"
+                style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                Todo
+              </button>
+              <button
+                onClick={deleteSelected}
+                disabled={selectedIds.size === 0}
+                className="text-[10px] font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all disabled:opacity-30"
+                style={{ background: 'rgba(185,28,28,0.85)', color: 'white' }}
+              >
+                🗑 Eliminar {selectedIds.size > 0 ? selectedIds.size : ''}
+              </button>
+              <button
+                onClick={() => { setSelectionMode(false); setSelectedIds(new Set()) }}
+                className="text-[10px] font-medium px-2.5 py-1.5 rounded-xl transition-all"
+                style={{ color: 'rgba(255,255,255,0.4)' }}
+              >
+                ✕
+              </button>
+            </div>
           )}
         </div>
 
