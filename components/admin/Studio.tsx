@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
-import type { Layer, Asset, Collection, AvatarState, Keyword } from '@/types'
+import type { Layer, Asset, Collection, AvatarState, Keyword, AssetTransform } from '@/types'
 import AssetInspector from '@/components/admin/AssetInspector'
 import SmartBatchUploader from '@/components/admin/SmartBatchUploader'
 
@@ -70,8 +70,10 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [inspecting, setInspecting]     = useState<Asset | null>(null)
   const [centerMode, setCenterMode]     = useState<'assets' | 'batch'>('assets')
   const [dropOver, setDropOver]         = useState(false)
-  const [selectionMode, setSelectionMode] = useState(false)
-  const [selectedIds, setSelectedIds]     = useState<Set<string>>(new Set())
+  const [selectionMode, setSelectionMode]       = useState(false)
+  const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set())
+  const [transformOverrides, setTransformOverrides] = useState<Record<string, AssetTransform>>({})
+  const [savingTransform, setSavingTransform]   = useState(false)
 
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -80,6 +82,19 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const layerAssets  = assets.filter(a => a.collectionId === collectionId && a.layerKey === selectedKey)
   const selectedLayer = collLayers.find(l => l.layerKey === selectedKey)
   const meta          = LAYER_META[selectedKey] ?? { emoji: '📁', accent: '#6b7280' }
+
+  // Active asset for transform controls
+  const activeAssetId = (avatarState.selectedAssets[selectedKey] ?? null) as string | null
+  const activeAsset   = activeAssetId ? assets.find(a => a.id === activeAssetId) ?? null : null
+  const activeTransform: AssetTransform = activeAssetId
+    ? (transformOverrides[activeAssetId] ?? activeAsset?.transform ?? { scale: 1, offsetX: 0, offsetY: 0 })
+    : { scale: 1, offsetX: 0, offsetY: 0 }
+  const transformDirty = activeAssetId ? !!transformOverrides[activeAssetId] : false
+
+  // Merge transform overrides into assets array for live canvas preview
+  const canvasAssets = assets.map(a =>
+    transformOverrides[a.id] ? { ...a, transform: transformOverrides[a.id] } : a
+  )
 
   // ── Drag & drop layer reorder ─────────────────────────
   function onDragStart(i: number) {
@@ -207,6 +222,36 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     if (!confirm('¿Eliminar este asset?')) return
     await fetch(`/api/assets?id=${assetId}`, { method: 'DELETE' })
     window.location.reload()
+  }
+
+  // ── Transform (live scale/offset for active asset) ───
+  function updateTransform(key: keyof AssetTransform, val: number) {
+    if (!activeAssetId) return
+    setTransformOverrides(prev => ({
+      ...prev,
+      [activeAssetId]: { ...activeTransform, [key]: val },
+    }))
+  }
+
+  async function saveTransform() {
+    if (!activeAssetId || !transformOverrides[activeAssetId]) return
+    setSavingTransform(true)
+    await fetch('/api/assets', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: activeAssetId, transform: transformOverrides[activeAssetId] }),
+    })
+    setSavingTransform(false)
+    // clear override — DB now has the value
+    setTransformOverrides(prev => { const n = { ...prev }; delete n[activeAssetId]; return n })
+  }
+
+  function resetTransform() {
+    if (!activeAssetId) return
+    setTransformOverrides(prev => ({
+      ...prev,
+      [activeAssetId]: { scale: 1, offsetX: 0, offsetY: 0 },
+    }))
   }
 
   // ── File drag-and-drop (center panel) ────────────────
@@ -665,7 +710,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
             <AvatarCanvas
               state={avatarState}
               layers={collLayers}
-              assets={assets}
+              assets={canvasAssets}
             />
           </div>
         </div>
@@ -735,6 +780,56 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                 ↩ Reset
               </button>
             </div>
+
+            {/* Live transform panel — visible when an asset is selected */}
+            {activeAsset && (
+              <div className="border-t pt-4 space-y-3" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                <div className="flex items-center justify-between">
+                  <p className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                    Escala · posición
+                  </p>
+                  {(activeTransform.scale !== 1 || activeTransform.offsetX !== 0 || activeTransform.offsetY !== 0) && (
+                    <button
+                      onClick={resetTransform}
+                      className="text-[9px]"
+                      style={{ color: 'rgba(255,255,255,0.25)' }}
+                    >
+                      ↩ reset
+                    </button>
+                  )}
+                </div>
+
+                <TransformSlider
+                  label={`Escala  ${activeTransform.scale.toFixed(2)}×`}
+                  min={0.3} max={2} step={0.01}
+                  value={activeTransform.scale}
+                  onChange={v => updateTransform('scale', v)}
+                />
+                <TransformSlider
+                  label={`X  ${activeTransform.offsetX > 0 ? '+' : ''}${activeTransform.offsetX}px`}
+                  min={-400} max={400} step={4}
+                  value={activeTransform.offsetX}
+                  onChange={v => updateTransform('offsetX', v)}
+                />
+                <TransformSlider
+                  label={`Y  ${activeTransform.offsetY > 0 ? '+' : ''}${activeTransform.offsetY}px`}
+                  min={-400} max={400} step={4}
+                  value={activeTransform.offsetY}
+                  onChange={v => updateTransform('offsetY', v)}
+                />
+
+                {transformDirty && (
+                  <button
+                    onClick={saveTransform}
+                    disabled={savingTransform}
+                    className="w-full text-xs font-semibold py-2 rounded-xl transition-all disabled:opacity-50"
+                    style={{ background: 'rgba(124,58,237,0.8)', color: 'white' }}
+                  >
+                    {savingTransform ? 'Guardando…' : '💾 Guardar escala'}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </aside>
@@ -751,6 +846,29 @@ export default function Studio({ collections, layers: initialLayers, assets, key
           onSaved={() => { setInspecting(null); window.location.reload() }}
         />
       )}
+    </div>
+  )
+}
+
+// ── Inline slider for live transform ─────────────────────
+function TransformSlider({ label, min, max, step, value, onChange }: {
+  label: string; min: number; max: number; step: number; value: number; onChange: (v: number) => void
+}) {
+  const pct = ((value - min) / (max - min)) * 100
+  return (
+    <div>
+      <p className="text-[9px] mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{label}</p>
+      <input
+        type="range"
+        min={min} max={max} step={step}
+        value={value}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        className="w-full h-1 rounded-full appearance-none cursor-pointer"
+        style={{
+          accentColor: '#7c3aed',
+          background: `linear-gradient(to right, #7c3aed ${pct}%, rgba(255,255,255,0.1) 0%)`,
+        }}
+      />
     </div>
   )
 }
