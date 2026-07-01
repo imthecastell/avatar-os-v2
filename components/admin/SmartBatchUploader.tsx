@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { flushSync } from 'react-dom'
 import { detectLayerFromFilename } from '@/lib/engine/asset-classifier'
 import type { Collection, Layer } from '@/types'
 
@@ -170,14 +171,19 @@ export default function SmartBatchUploader({ collections, layers, onDone }: Prop
         const data = await res.json()
 
         if (data.error) {
-          setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], error: data.error } }))
+          flushSync(() => {
+            setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], error: data.error } }))
+          })
           break
         }
 
         uploaded++
-        setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], uploaded } }))
+        flushSync(() => {
+          setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], uploaded } }))
+        })
       }
 
+      await Promise.resolve() // separate render before marking done
       setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], done: true } }))
     }
 
