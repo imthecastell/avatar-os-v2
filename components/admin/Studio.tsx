@@ -81,6 +81,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [selectionMode, setSelectionMode]       = useState(false)
   const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set())
   const [transformOverrides, setTransformOverrides] = useState<Record<string, AssetTransform>>({})
+  const [openMenuId, setOpenMenuId]               = useState<string | null>(null)
 
   const fileRef       = useRef<HTMLInputElement>(null)
   const layerListRef  = useRef<HTMLDivElement>(null)
@@ -636,7 +637,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                 return (
                   <div key={asset.id} className="relative aspect-square group">
                     <button
-                      onClick={() => selectionMode ? toggleSelectAsset(asset.id) : selectAsset(selectedKey, asset.id)}
+                      onClick={() => { setOpenMenuId(null); selectionMode ? toggleSelectAsset(asset.id) : selectAsset(selectedKey, asset.id) }}
                       className="w-full h-full rounded-2xl overflow-hidden transition-all"
                       style={{
                         border: `2px solid ${selectionMode ? (isSelected ? '#ef4444' : 'rgba(255,255,255,0.08)') : isActive ? meta.accent : 'rgba(255,255,255,0.08)'}`,
@@ -693,37 +694,50 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                       </span>
                     )}
 
-                    {/* Hover overlay — hidden in selection mode */}
-                    <div className={`absolute inset-0 rounded-2xl flex flex-col items-stretch justify-end p-1.5 gap-1 transition-opacity ${selectionMode ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'}`} style={{ background: 'rgba(0,0,0,0.75)' }}>
-                      <p className="text-[9px] font-medium text-center truncate px-1 pb-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                        {asset.name}
-                      </p>
+                    {/* Menu toggle button — always visible, hidden in selection mode */}
+                    {!selectionMode && (
                       <button
-                        onClick={e => { e.stopPropagation(); setInspecting(asset) }}
-                        className="text-[9px] font-medium rounded-lg py-1 transition-colors text-white"
-                        style={{ background: 'rgba(255,255,255,0.15)' }}
+                        onClick={e => { e.stopPropagation(); setOpenMenuId(openMenuId === asset.id ? null : asset.id) }}
+                        className="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center transition-opacity z-10"
+                        style={{ background: 'rgba(0,0,0,0.6)', color: 'rgba(255,255,255,0.85)', fontSize: 13, lineHeight: 1 }}
                       >
-                        ⚙ Editar
+                        ···
                       </button>
-                      <button
-                        onClick={e => { e.stopPropagation(); setDefault(asset.id) }}
-                        className="text-[9px] font-medium rounded-lg py-1 transition-colors text-white"
-                        style={{ background: 'rgba(139,92,246,0.9)' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,237,1)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(139,92,246,0.9)')}
+                    )}
+
+                    {/* Action overlay — shown on tap/click of menu button */}
+                    {!selectionMode && openMenuId === asset.id && (
+                      <div
+                        className="absolute inset-0 rounded-2xl flex flex-col items-stretch justify-end p-1.5 gap-1 z-20"
+                        style={{ background: 'rgba(0,0,0,0.82)' }}
+                        onClick={e => { e.stopPropagation(); setOpenMenuId(null) }}
                       >
-                        Default
-                      </button>
-                      <button
-                        onClick={e => { e.stopPropagation(); deleteAsset(asset.id) }}
-                        className="text-[9px] font-medium rounded-lg py-1 transition-colors"
-                        style={{ background: 'rgba(127,29,29,0.8)', color: 'rgba(252,165,165,1)' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(185,28,28,0.9)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(127,29,29,0.8)')}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
+                        <p className="text-[9px] font-medium text-center truncate px-1 pb-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                          {asset.name}
+                        </p>
+                        <button
+                          onClick={e => { e.stopPropagation(); setOpenMenuId(null); setInspecting(asset) }}
+                          className="text-[9px] font-medium rounded-lg py-1 text-white"
+                          style={{ background: 'rgba(255,255,255,0.15)' }}
+                        >
+                          ⚙ Editar
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); setOpenMenuId(null); setDefault(asset.id) }}
+                          className="text-[9px] font-medium rounded-lg py-1 text-white"
+                          style={{ background: 'rgba(139,92,246,0.9)' }}
+                        >
+                          Default
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); setOpenMenuId(null); deleteAsset(asset.id) }}
+                          className="text-[9px] font-medium rounded-lg py-1"
+                          style={{ background: 'rgba(127,29,29,0.8)', color: 'rgba(252,165,165,1)' }}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
               })}
