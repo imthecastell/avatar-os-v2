@@ -15,10 +15,11 @@ export interface Layer {
   labelEn:      string
   type:         'svg' | 'image' | 'auto'
   blendMode:    string
-  colorToken:   string | null
-  optional:     boolean
-  locked:       boolean
-  pairedWith:   string | null
+  colorToken:       string | null
+  optional:         boolean
+  locked:           boolean
+  pairedWith:       string | null
+  visibleInBuilder: boolean
 }
 
 export interface AssetTransform {

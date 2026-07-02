@@ -100,6 +100,8 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [transformOverrides, setTransformOverrides] = useState<Record<string, AssetTransform>>({})
   const [openMenuId, setOpenMenuId]               = useState<string | null>(null)
   const [layerEditMode, setLayerEditMode]         = useState(false)
+  const [showPublish, setShowPublish]             = useState(false)
+  const [publishing, setPublishing]               = useState(false)
 
   const fileRef       = useRef<HTMLInputElement>(null)
   const layerListRef  = useRef<HTMLDivElement>(null)
@@ -202,6 +204,14 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     await fetch('/api/layers', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: layerId, blend_mode: blendMode }),
+    })
+  }
+
+  async function updateVisibility(layerId: string, visible: boolean) {
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, visibleInBuilder: visible } : l))
+    await fetch('/api/layers', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: layerId, visible_in_builder: visible }),
     })
   }
 
@@ -460,6 +470,16 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                 }}>
                   {count}
                 </span>
+                {/* Visibility toggle — always visible */}
+                <button
+                  onClick={e => { e.stopPropagation(); updateVisibility(layer.id, !layer.visibleInBuilder) }}
+                  title={layer.visibleInBuilder ? 'Visible en builder (click para ocultar)' : 'Oculto en builder (click para publicar)'}
+                  className="w-5 h-5 shrink-0 flex items-center justify-center rounded-lg text-[10px] transition-all"
+                  style={{ color: layer.visibleInBuilder ? 'rgba(167,139,250,0.7)' : 'rgba(255,255,255,0.15)', background: 'transparent' }}
+                >
+                  {layer.visibleInBuilder ? '👁' : '🙈'}
+                </button>
+
                 {/* Edit + Delete buttons — visible on hover */}
                 <button
                   onClick={e => { e.stopPropagation(); setSelectedKey(layer.layerKey); setLayerEditMode(true) }}
@@ -544,10 +564,86 @@ export default function Studio({ collections, layers: initialLayers, assets, key
           </div>
         )}
 
-        <div className="p-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-          <p className="text-[9px] text-center" style={{ color: 'rgba(255,255,255,0.15)' }}>
+        {/* Publish panel */}
+        {showPublish && (
+          <div className="mx-2 mb-2 p-3 rounded-2xl shrink-0 space-y-3" style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.25)' }}>
+            <div className="flex items-center justify-between">
+              <p className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: '#a78bfa' }}>Resumen del builder</p>
+              <button onClick={() => setShowPublish(false)} className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>✕</button>
+            </div>
+
+            {/* Visible layers */}
+            <div>
+              <p className="text-[9px] mb-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                👁 Tabs visibles ({collLayers.filter(l => l.visibleInBuilder).length})
+              </p>
+              <div className="space-y-0.5">
+                {collLayers.filter(l => l.visibleInBuilder).map((l, i) => {
+                  const m = LAYER_META[l.layerKey] ?? { emoji: '📁', accent: '#6b7280' }
+                  const count = assets.filter(a => a.collectionId === collectionId && a.layerKey === l.layerKey).length
+                  return (
+                    <div key={l.id} className="flex items-center gap-1.5 text-[9px]" style={{ color: count === 0 ? '#fca5a5' : 'rgba(255,255,255,0.55)' }}>
+                      <span className="w-3 text-center tabular-nums" style={{ color: 'rgba(255,255,255,0.2)' }}>{i + 1}</span>
+                      <span>{m.emoji}</span>
+                      <span className="flex-1">{l.labelEs}</span>
+                      {count === 0 && <span style={{ color: '#fca5a5' }}>sin assets</span>}
+                      {count > 0 && <span style={{ color: 'rgba(255,255,255,0.25)' }}>{count}</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Hidden layers */}
+            {collLayers.filter(l => !l.visibleInBuilder).length > 0 && (
+              <div>
+                <p className="text-[9px] mb-1.5" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                  🙈 Ocultas en builder ({collLayers.filter(l => !l.visibleInBuilder).length})
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {collLayers.filter(l => !l.visibleInBuilder).map(l => {
+                    const m = LAYER_META[l.layerKey] ?? { emoji: '📁', accent: '#6b7280' }
+                    return (
+                      <span key={l.id} className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)' }}>
+                        {m.emoji} {l.labelEs}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={async () => {
+                setPublishing(true)
+                await fetch('/api/revalidate', { method: 'POST' })
+                setPublishing(false)
+                setShowPublish(false)
+              }}
+              disabled={publishing}
+              className="w-full text-xs font-semibold py-2 rounded-xl transition-all disabled:opacity-50"
+              style={{ background: 'rgba(124,58,237,0.8)', color: 'white' }}
+            >
+              {publishing ? 'Publicando…' : '🚀 Publicar cambios'}
+            </button>
+          </div>
+        )}
+
+        <div className="px-3 py-2.5 border-t shrink-0 flex items-center gap-2" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+          <p className="flex-1 text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>
             Arrastra para reordenar
           </p>
+          <button
+            onClick={() => setShowPublish(v => !v)}
+            className="text-[9px] font-semibold px-2.5 py-1 rounded-lg transition-all shrink-0"
+            style={{
+              background: showPublish ? 'rgba(124,58,237,0.5)' : 'rgba(124,58,237,0.15)',
+              color: showPublish ? 'white' : '#a78bfa',
+              outline: showPublish ? '1px solid rgba(124,58,237,0.5)' : 'none',
+            }}
+          >
+            🚀 Publicar
+          </button>
         </div>
       </aside>
 

@@ -42,8 +42,9 @@ const AvatarCanvas = dynamic(() => import('@/components/builder/AvatarCanvas'), 
 
 // ── Constants ─────────────────────────────────────────────
 
-// Capas ocultas en builder (auto-aplican su default, gestionadas solo en admin)
-const HIDDEN_IN_BUILDER = new Set(['hair-front', 'effect-final', 'frame'])
+// Capas ocultas en builder — ahora se leen de layer.visibleInBuilder (gestionado en admin)
+// Mantenemos este set solo para la capa hair-front que se gestiona dentro del tab de cabello
+const ALWAYS_HIDDEN = new Set(['hair-front'])
 
 // Emojis y labels por capa
 const LAYER_META: Record<string, { emoji: string; es: string; en: string }> = {
@@ -148,8 +149,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     }))
   }, [])
 
-  // Tab activo: capas visibles del builder (excluye las ocultas)
-  const visibleLayers = layers.filter(l => !HIDDEN_IN_BUILDER.has(l.layerKey))
+  // Tab activo: capas marcadas como visibles en el admin (excluyendo siempre hair-front)
+  const visibleLayers = layers.filter(l => l.visibleInBuilder && !ALWAYS_HIDDEN.has(l.layerKey))
   const [activeCat, setActiveCat] = useState<string>(visibleLayers[0]?.layerKey ?? '')
 
   const hiddenLayers = getHiddenLayers(state, exceptions)

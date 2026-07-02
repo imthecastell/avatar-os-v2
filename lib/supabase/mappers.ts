@@ -33,10 +33,11 @@ export function mapLayer(r: Record<string, unknown>): Layer {
     labelEn:      r.label_en as string,
     type:         r.type as 'svg' | 'image' | 'auto',
     blendMode:    r.blend_mode as string,
-    colorToken:   r.color_token as string | null,
-    optional:     r.optional as boolean,
-    locked:       r.locked as boolean,
-    pairedWith:   r.paired_with as string | null,
+    colorToken:       r.color_token as string | null,
+    optional:         r.optional as boolean,
+    locked:           r.locked as boolean,
+    pairedWith:       r.paired_with as string | null,
+    visibleInBuilder: (r.visible_in_builder as boolean) ?? true,
   }
 }
 
