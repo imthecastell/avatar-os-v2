@@ -24,3 +24,111 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ══════════════════════════════════════════════════════════
+   Builder FX — micro-interacciones (solo transform/opacity,
+   GPU-composited; el PNG exportado no se ve afectado)
+   ══════════════════════════════════════════════════════════ */
+
+/* Flotación suave del avatar mientras se arma */
+@keyframes fx-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.fx-float { animation: fx-float 5s ease-in-out infinite; }
+
+/* Glow que respira detrás del canvas */
+@keyframes fx-breathe {
+  0%, 100% { opacity: 0.12; transform: scale(1); }
+  50%      { opacity: 0.22; transform: scale(1.06); }
+}
+.fx-breathe { animation: fx-breathe 5s ease-in-out infinite; }
+
+/* Pop al seleccionar una pieza — dos nombres idénticos para
+   poder re-disparar alternando la clase sin re-montar el canvas */
+@keyframes fx-pop-a {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.035); }
+  70%  { transform: scale(0.99); }
+  100% { transform: scale(1); }
+}
+@keyframes fx-pop-b {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.035); }
+  70%  { transform: scale(0.99); }
+  100% { transform: scale(1); }
+}
+.fx-pop-a { animation: fx-pop-a 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.fx-pop-b { animation: fx-pop-b 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* Giro del dado al randomizar */
+@keyframes fx-dice {
+  0%   { transform: rotate(0deg) scale(1); }
+  50%  { transform: rotate(180deg) scale(1.25); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+.fx-dice { display: inline-block; animation: fx-dice 0.55s ease; }
+
+/* Entrada del contenido de tab */
+@keyframes fx-slide-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fx-slide-up { animation: fx-slide-up 0.28s ease both; }
+
+/* Entrada escalonada de items del grid (delay inline por item) */
+@keyframes fx-item-in {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.fx-item-in { animation: fx-item-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* Confetti — cada partícula usa CSS vars --dx --dy --rot --c */
+@keyframes fx-confetti {
+  0%   { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(0.4); }
+}
+.fx-confetti-piece {
+  position: absolute;
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  background: var(--c);
+  animation: fx-confetti 0.9s cubic-bezier(0.15, 0.85, 0.45, 1) forwards;
+  pointer-events: none;
+}
+
+/* Entrada del modal de export */
+@keyframes fx-modal-in {
+  from { opacity: 0; transform: scale(0.88) translateY(14px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.fx-modal-in { animation: fx-modal-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+@keyframes fx-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.fx-fade-in { animation: fx-fade-in 0.25s ease both; }
+
+/* Shimmer del CTA principal */
+@keyframes fx-shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+.fx-shimmer {
+  background-size: 200% auto;
+  animation: fx-shimmer 3.5s linear infinite;
+}
+
+/* Feedback táctil universal (iPad no tiene hover) */
+.fx-tap { transition: transform 0.12s ease; }
+.fx-tap:active { transform: scale(0.92); }
+
+/* Accesibilidad: sin animaciones si el usuario las desactivó */
+@media (prefers-reduced-motion: reduce) {
+  .fx-float, .fx-breathe, .fx-pop-a, .fx-pop-b, .fx-dice,
+  .fx-slide-up, .fx-item-in, .fx-confetti-piece, .fx-modal-in,
+  .fx-fade-in, .fx-shimmer {
+    animation: none;
+  }
+}

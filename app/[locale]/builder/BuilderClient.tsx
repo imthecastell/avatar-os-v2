@@ -6,6 +6,7 @@ import Image from 'next/image'
 import type { AvatarState, Layer, Asset, LayerException, LayerDefault, Collection } from '@/types'
 import type { AvatarCompositor } from '@/lib/engine/compositor'
 import ExportModal from '@/components/builder/ExportModal'
+import ConfettiBurst from '@/components/builder/ConfettiBurst'
 import Link from 'next/link'
 
 // ── Share URL helpers ─────────────────────────────────────
@@ -133,6 +134,11 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
   const [shareUrl, setShareUrl]   = useState<string | null>(null)
   const compositorRef             = useRef<AvatarCompositor | null>(null)
 
+  // FX — solo afectan la UI mientras se arma el avatar; el PNG exportado es estático
+  const [popTick,  setPopTick]  = useState(0)   // pop del canvas al elegir pieza/color
+  const [diceTick, setDiceTick] = useState(0)   // giro del dado al randomizar
+  const [burstId,  setBurstId]  = useState(0)   // confetti al desbloquear keyword
+
   // Load avatar state from URL ?s= param on first render
   useEffect(() => {
     const params  = new URLSearchParams(window.location.search)
@@ -168,10 +174,12 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
   // ── State mutations ───────────────────────────────────
   function setToken(key: string, hex: string) {
     setState(s => ({ ...s, tokens: { ...s.tokens, [key]: hex } }))
+    setPopTick(t => t + 1)
   }
 
   function selectAsset(layerKey: string, assetId: string | null) {
     setState(s => ({ ...s, selectedAssets: { ...s.selectedAssets, [layerKey]: assetId } }))
+    setPopTick(t => t + 1)
   }
 
   // Cabello: enlaza hair-back + hair-front por nombre, aplica suggestedColor si existe
@@ -190,9 +198,12 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
       }
       return { ...s, selectedAssets: sel }
     })
+    setPopTick(t => t + 1)
   }
 
   function randomize() {
+    setDiceTick(t => t + 1)
+    setPopTick(t => t + 1)
     const sel: Record<string, string | null> = {}
     for (const layer of layers) {
       const opts = assets.filter(a => a.layerKey === layer.layerKey && !a.keywordId)
@@ -211,8 +222,10 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     setState(s => ({ ...s, selectedAssets: sel, tokens: { ...s.tokens, 'skin-color': skin.hex, 'hair-color': hair } }))
   }
 
-  function handleExport() {
+  async function handleExport() {
     if (!compositorRef.current) return
+    // Esperar renders en vuelo — si no, el PNG sale a medio dibujar
+    await compositorRef.current.whenIdle()
     setExportUrl(compositorRef.current.exportPNG())
     const encoded = encodeState(state)
     setShareUrl(`${window.location.origin}/${locale}/builder?s=${encoded}`)
@@ -224,6 +237,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
       unlockedKeywords: s.unlockedKeywords.includes(keywordId) ? s.unlockedKeywords : [...s.unlockedKeywords, keywordId],
       extraColor: s.extraColor || isXtra,
     }))
+    setBurstId(b => b + 1)
   }
 
   const handleCompositorReady = useCallback((c: AvatarCompositor) => {
@@ -275,9 +289,14 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
 
         {/* CANVAS — fixed height strip on mobile, flex-1 on desktop */}
         <div className="h-56 shrink-0 lg:h-auto lg:flex-1 flex items-center justify-center p-4 lg:p-10 relative">
-            <div className="relative h-full aspect-square max-h-full max-w-full">
-              <div className="absolute inset-0 rounded-full blur-3xl opacity-15" style={{ background: 'radial-gradient(circle, #7c3aed, transparent 70%)' }} />
-              <div className="relative w-full h-full rounded-[28px] lg:rounded-[36px] overflow-hidden" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
+            <div className="relative h-full aspect-square max-h-full max-w-full fx-float">
+              <div className="absolute inset-0 rounded-full blur-3xl fx-breathe" style={{ background: 'radial-gradient(circle, #7c3aed, transparent 70%)' }} />
+              {/* Pop re-disparable: alternar entre dos clases con keyframes idénticos
+                  reinicia la animación sin re-montar el canvas (que perdería su caché) */}
+              <div
+                className={`relative w-full h-full rounded-[28px] lg:rounded-[36px] overflow-hidden ${popTick % 2 ? 'fx-pop-a' : 'fx-pop-b'}`}
+                style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06)' }}
+              >
                 <AvatarCanvas
                   state={state}
                   layers={layers.filter(l => !hiddenLayers.has(l.layerKey))}
@@ -285,12 +304,13 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                   onCompositorReady={handleCompositorReady}
                 />
               </div>
+              {burstId > 0 && <ConfettiBurst key={burstId} />}
               <button
                 onClick={randomize}
-                className="absolute bottom-2 left-2 text-[10px] font-medium px-2.5 py-1 rounded-xl backdrop-blur-md lg:text-xs lg:px-3 lg:py-1.5 lg:bottom-3 lg:left-3"
+                className="absolute bottom-2 left-2 text-[10px] font-medium px-2.5 py-1 rounded-xl backdrop-blur-md fx-tap lg:text-xs lg:px-3 lg:py-1.5 lg:bottom-3 lg:left-3"
                 style={{ background: 'rgba(0,0,0,0.55)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.1)' }}
               >
-                🎲 {t('Aleatorio', 'Random')}
+                <span key={diceTick} className={diceTick > 0 ? 'fx-dice' : undefined}>🎲</span> {t('Aleatorio', 'Random')}
               </button>
             </div>
         </div>
@@ -308,16 +328,20 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                 if (hiddenLayers.has(layer.layerKey)) return null
                 const m        = LAYER_META[layer.layerKey]
                 const isActive = activeCat === layer.layerKey
+                const hasSelection = !!state.selectedAssets[layer.layerKey]
                 return (
                   <button
                     key={layer.layerKey}
                     onClick={() => setActiveCat(layer.layerKey)}
-                    className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all shrink-0 lg:px-2.5 lg:py-2"
+                    className="relative flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all shrink-0 fx-tap lg:px-2.5 lg:py-2"
                     style={{
                       background: isActive ? 'rgba(124,58,237,0.2)' : 'transparent',
                       outline: isActive ? '1px solid rgba(124,58,237,0.4)' : 'none',
                     }}
                   >
+                    {hasSelection && (
+                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full" style={{ background: isActive ? '#a78bfa' : 'rgba(167,139,250,0.5)' }} />
+                    )}
                     <span className="text-sm leading-none lg:text-base">{m?.emoji ?? '📁'}</span>
                     <span className="text-[8px] font-medium whitespace-nowrap lg:text-[9px]" style={{ color: isActive ? '#a78bfa' : 'rgba(255,255,255,0.35)' }}>
                       {locale === 'en' ? (m?.en ?? layer.labelEn) : (m?.es ?? layer.labelEs)}
@@ -328,8 +352,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
             </div>
           </div>
 
-          {/* Tab content */}
-          <div className="flex-1 overflow-y-auto p-3 lg:p-4 space-y-4 lg:space-y-5">
+          {/* Tab content — key por tab para animar la entrada al cambiar */}
+          <div key={activeCat} className="flex-1 overflow-y-auto p-3 lg:p-4 space-y-4 lg:space-y-5 fx-slide-up">
             <LayerPanel
               categoryKey={activeCat}
               layers={layers}
@@ -358,8 +382,12 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
           <div className="shrink-0 px-3 pb-3 lg:px-4 lg:pb-4">
             <button
               onClick={handleExport}
-              className="w-full text-sm font-semibold py-2.5 lg:py-3 rounded-2xl"
-              style={{ background: 'linear-gradient(135deg,#6d28d9,#9333ea)', color: 'white', boxShadow: '0 4px 20px rgba(124,58,237,0.35)' }}
+              className="w-full text-sm font-semibold py-2.5 lg:py-3 rounded-2xl fx-shimmer fx-tap"
+              style={{
+                background: 'linear-gradient(90deg,#6d28d9,#9333ea,#c084fc,#9333ea,#6d28d9)',
+                color: 'white',
+                boxShadow: '0 4px 20px rgba(124,58,237,0.35)',
+              }}
             >
               ✨ {t('Crear mi PFP', 'Create my PFP')}
             </button>
@@ -427,7 +455,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
                   key={tone.hex}
                   onClick={() => onSkinChange(tone.hex)}
                   title={tone.emoji}
-                  className="aspect-square rounded-2xl transition-all relative"
+                  className="aspect-square rounded-2xl transition-all relative fx-tap"
                   style={{
                     background: tone.hex,
                     outline: active ? '3px solid #a78bfa' : tone.fantasy ? '1px dashed rgba(255,255,255,0.15)' : '1px solid rgba(255,255,255,0.08)',
@@ -501,7 +529,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
                 <button
                   key={hex}
                   onClick={() => onHairColorChange(hex)}
-                  className="aspect-square rounded-xl transition-all"
+                  className="aspect-square rounded-xl transition-all fx-tap"
                   style={{
                     background: hex,
                     outline: active ? '3px solid #a78bfa' : '1px solid rgba(255,255,255,0.08)',
@@ -604,7 +632,7 @@ function AssetGrid({ assets, selectedId, optional, onSelect }: {
       {optional && (
         <button
           onClick={() => onSelect(null)}
-          className="aspect-square rounded-2xl flex items-center justify-center transition-all"
+          className="aspect-square rounded-2xl flex items-center justify-center transition-all fx-item-in fx-tap"
           style={{
             border: `2px solid ${selectedId === null ? 'rgba(124,58,237,0.8)' : 'rgba(255,255,255,0.08)'}`,
             background: selectedId === null ? 'rgba(124,58,237,0.12)' : 'rgba(255,255,255,0.02)',
@@ -614,18 +642,19 @@ function AssetGrid({ assets, selectedId, optional, onSelect }: {
         </button>
       )}
 
-      {assets.map(asset => {
+      {assets.map((asset, i) => {
         const isActive = selectedId === asset.id
         return (
           <button
             key={asset.id}
             onClick={() => onSelect(asset.id)}
-            className="relative aspect-square rounded-2xl overflow-hidden transition-all"
+            className="relative aspect-square rounded-2xl overflow-hidden transition-all fx-item-in fx-tap"
             style={{
               border: `2px solid ${isActive ? '#7c3aed' : 'rgba(255,255,255,0.07)'}`,
               background: 'rgba(255,255,255,0.03)',
               transform: isActive ? 'scale(1.06)' : undefined,
               boxShadow: isActive ? '0 0 20px rgba(124,58,237,0.5)' : undefined,
+              animationDelay: `${Math.min(i * 30, 360)}ms`,
             }}
           >
             {asset.cdnUrl && (

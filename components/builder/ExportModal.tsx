@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import ConfettiBurst from '@/components/builder/ConfettiBurst'
 
 interface Props {
   dataUrl:   string
@@ -35,14 +36,15 @@ export default function ExportModal({ dataUrl, shareUrl, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 fx-fade-in"
       style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(12px)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="w-full max-w-xs rounded-3xl overflow-hidden flex flex-col"
+        className="relative w-full max-w-xs rounded-3xl overflow-hidden flex flex-col fx-modal-in"
         style={{ background: '#111120', border: '1px solid rgba(255,255,255,0.08)' }}
       >
+        <ConfettiBurst count={28} />
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3">
           <div>

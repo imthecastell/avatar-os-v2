@@ -22,7 +22,24 @@ export class AvatarCompositor {
     this.ctx = canvas.getContext('2d')!
   }
 
-  async render(state: AvatarState, layers: Layer[], assets: Asset[]) {
+  private currentRender: Promise<void> = Promise.resolve()
+
+  render(state: AvatarState, layers: Layer[], assets: Asset[]): Promise<void> {
+    const p = this.doRender(state, layers, assets)
+    this.currentRender = p
+    return p
+  }
+
+  /** Espera a que no haya renders en vuelo — exportar durante un render captura el canvas a medio dibujar */
+  async whenIdle(): Promise<void> {
+    let p: Promise<void>
+    do {
+      p = this.currentRender
+      await p.catch(() => {})
+    } while (p !== this.currentRender)
+  }
+
+  private async doRender(state: AvatarState, layers: Layer[], assets: Asset[]) {
     // Si llega un render más nuevo mientras este espera un await, este se aborta
     // para no intercalar draws de dos renders sobre el mismo canvas.
     const token = ++this.renderToken
