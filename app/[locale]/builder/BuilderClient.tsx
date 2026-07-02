@@ -450,22 +450,47 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
     )
   }
 
-  // ── CABELLO: estilos + color + custom picker ──────────
+  // ── CABELLO: frente + color + trasero en un solo panel ──
   if (categoryKey === 'hair-back') {
+    const hairFrontAssets = assets.filter(a =>
+      a.layerKey === 'hair-front' &&
+      (!a.keywordId || state.unlockedKeywords.includes(a.keywordId))
+    )
+    const hairFrontId = state.selectedAssets['hair-front'] ?? null
+
+    function handleHairFront(assetId: string | null) {
+      onSelectAsset('hair-front', assetId)
+      if (assetId) {
+        const a = assets.find(x => x.id === assetId)
+        if (a?.suggestedColor) onHairColorChange(a.suggestedColor)
+      }
+    }
+
+    function handleHairBack(assetId: string | null) {
+      onSelectAsset('hair-back', assetId)
+      if (assetId) {
+        const a = assets.find(x => x.id === assetId)
+        if (a?.suggestedColor) onHairColorChange(a.suggestedColor)
+      }
+    }
+
     return (
       <div className="space-y-5">
+
+        {/* FRENTE */}
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            {t('Estilo', 'Style')}
+            {t('Frente', 'Front')}
           </p>
           <AssetGrid
-            assets={layerAssets}
-            selectedId={selectedId}
-            optional={layer?.optional ?? false}
-            onSelect={onSelectHair}
+            assets={hairFrontAssets}
+            selectedId={hairFrontId}
+            optional={true}
+            onSelect={handleHairFront}
           />
         </div>
 
+        {/* COLOR */}
         <div>
           <Divider label={t('Color', 'Color')} />
           <div className="grid grid-cols-6 gap-2 mt-3">
@@ -486,8 +511,6 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
               )
             })}
           </div>
-
-          {/* Custom color picker */}
           <div className="mt-3 flex items-center gap-3">
             <input
               type="color"
@@ -501,6 +524,20 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
             </p>
           </div>
         </div>
+
+        {/* TRASERO */}
+        <div>
+          <Divider label={t('Trasero', 'Back')} />
+          <div className="mt-3">
+            <AssetGrid
+              assets={layerAssets}
+              selectedId={selectedId}
+              optional={layer?.optional ?? false}
+              onSelect={handleHairBack}
+            />
+          </div>
+        </div>
+
       </div>
     )
   }
