@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
-import { detectLayerFromFilename } from '@/lib/engine/asset-classifier'
+import { detectLayerFromFilename, detectEditableColors, isSVGEditable } from '@/lib/engine/asset-classifier'
 import type { Collection, Layer } from '@/types'
 
 // ── Types ──────────────────────────────────────────────────
@@ -159,26 +159,54 @@ export default function SmartBatchUploader({ collections, layers, onDone }: Prop
           }
         }
 
-        // 2. Upload each file in the group
+        // 2. Upload each file directly to Supabase Storage (bypasses Vercel 4.5 MB limit)
         let uploaded = 0
         let groupError: string | null = null
 
         for (const file of group.files) {
-          const fd = new FormData()
-          fd.append('file', file)
-          fd.append('layer', group.layerKey)
-          fd.append('collectionId', collectionId)
+          const ext      = file.name.split('.').pop()?.toLowerCase() ?? ''
+          const fileType = ext === 'jpeg' ? 'jpg' : ext as 'svg' | 'png' | 'jpg'
 
-          const res  = await fetch('/api/assets/upload', { method: 'POST', body: fd })
-          const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-
-          if (data.error) {
-            groupError = data.error
-            break
+          // Detect SVG colors on the client — no need to send file content to the server
+          let colorMap: object[] = []
+          let svgEditable = false
+          if (fileType === 'svg') {
+            const text = await file.text()
+            colorMap    = detectEditableColors(text)
+            svgEditable = isSVGEditable(text)
           }
 
+          // Step A: get a signed upload URL (tiny JSON request, no file)
+          const presignRes  = await fetch('/api/assets/presign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name, layerKey: group.layerKey, collectionId }),
+          })
+          const presignData = await presignRes.json().catch(() => ({ error: `HTTP ${presignRes.status}` }))
+          if (presignData.error) { groupError = presignData.error; break }
+
+          // Step B: PUT file directly to Supabase Storage — no Vercel function involved
+          const uploadRes = await fetch(presignData.signedUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': presignData.contentType },
+            body: file,
+          })
+          if (!uploadRes.ok) { groupError = `Storage error: HTTP ${uploadRes.status}`; break }
+
+          // Step C: record asset metadata in the DB (tiny JSON request)
+          const recordRes  = await fetch('/api/assets/record', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              collectionId, layerKey: group.layerKey, filename: file.name,
+              storagePath: presignData.storagePath, cdnUrl: presignData.cdnUrl,
+              fileType, originalSize: file.size, colorMap, svgEditable,
+            }),
+          })
+          const recordData = await recordRes.json().catch(() => ({ error: `HTTP ${recordRes.status}` }))
+          if (recordData.error) { groupError = recordData.error; break }
+
           uploaded++
-          // yield to the event loop so React can re-render progress
           setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], uploaded } }))
           await new Promise<void>(r => setTimeout(r, 0))
         }
