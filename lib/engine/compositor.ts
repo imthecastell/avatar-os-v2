@@ -220,6 +220,10 @@ export class AvatarCompositor {
     return this.canvas.toDataURL('image/png')
   }
 
+  getCanvas(): HTMLCanvasElement {
+    return this.canvas
+  }
+
   clearCache() {
     this.renderCache.forEach(bm => bm.close())
     this.renderCache.clear()

@@ -1,12 +1,11 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
-import dynamic from 'next/dynamic'
+import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import type { AvatarState, Layer, Asset, LayerException, LayerDefault, Collection } from '@/types'
-import type { AvatarCompositor } from '@/lib/engine/compositor'
 import ExportModal from '@/components/builder/ExportModal'
 import ConfettiBurst from '@/components/builder/ConfettiBurst'
+import AvatarStage, { type AvatarStageHandle } from '@/components/builder/AvatarStage'
 import Link from 'next/link'
 
 // ── Share URL helpers ─────────────────────────────────────
@@ -36,11 +35,6 @@ function decodeState(encoded: string): Partial<AvatarState> | null {
   }
 }
 
-const AvatarCanvas = dynamic(() => import('@/components/builder/AvatarCanvas'), {
-  ssr: false,
-  loading: () => <div className="w-full h-full" style={{ background: 'rgba(255,255,255,0.02)' }} />,
-})
-
 // ── Constants ─────────────────────────────────────────────
 
 // Capas ocultas en builder — ahora se leen de layer.visibleInBuilder (gestionado en admin)
@@ -53,11 +47,15 @@ const LAYER_META: Record<string, { emoji: string; es: string; en: string }> = {
   'emotion':      { emoji: '😄', es: 'Expresión',  en: 'Expression' },
   'hair-back':    { emoji: '💇', es: 'Cabello',    en: 'Hair' },
   'head':         { emoji: '🧑', es: 'Cabeza',     en: 'Head' },
+  'body':         { emoji: '🫁', es: 'Cuerpo',     en: 'Body' },
   'shirt':        { emoji: '👕', es: 'Ropa',       en: 'Outfit' },
+  'clothes':      { emoji: '🧥', es: 'Prendas',    en: 'Clothes' },
   'acc-front':    { emoji: '🎩', es: 'Accesorio',  en: 'Accessory' },
   'mask':         { emoji: '😷', es: 'Máscara',    en: 'Mask' },
   'effect-final': { emoji: '✨', es: 'Efecto',     en: 'Effect' },
   'frame':        { emoji: '🖼️', es: 'Marco',     en: 'Frame' },
+  'arch':         { emoji: '🏛️', es: 'Arco',      en: 'Arch' },
+  'window':       { emoji: '🪟', es: 'Ventana',    en: 'Window' },
 }
 
 // Tonos de piel: 6 oficiales emoji + 3 fantasía
@@ -147,7 +145,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
   const [state, setState]         = useState<AvatarState>(() => buildInitialState(collection, layers, assets, defaults))
   const [exportUrl, setExportUrl] = useState<string | null>(null)
   const [shareUrl, setShareUrl]   = useState<string | null>(null)
-  const compositorRef             = useRef<AvatarCompositor | null>(null)
+  const stageRef                  = useRef<AvatarStageHandle | null>(null)
 
   // FX — solo afectan la UI mientras se arma el avatar; el PNG exportado es estático
   const [popTick,  setPopTick]  = useState(0)   // pop del canvas al elegir pieza/color
@@ -177,8 +175,12 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     }))
   }, [])
 
-  // Tab activo: capas marcadas como visibles en el admin (excluyendo siempre hair-front)
-  const visibleLayers = layers.filter(l => l.visibleInBuilder && !ALWAYS_HIDDEN.has(l.layerKey))
+  // Tab activo: capas visibles en admin, con al menos un asset (excluyendo hair-front)
+  const visibleLayers = layers.filter(l =>
+    l.visibleInBuilder &&
+    !ALWAYS_HIDDEN.has(l.layerKey) &&
+    assets.some(a => a.layerKey === l.layerKey)
+  )
   const [activeCat, setActiveCat] = useState<string>(visibleLayers[0]?.layerKey ?? '')
 
   // Pasos del wizard aplicables a esta colección (capa visible + con assets)
@@ -264,10 +266,9 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
   }
 
   async function handleExport() {
-    if (!compositorRef.current) return
-    // Esperar renders en vuelo — si no, el PNG sale a medio dibujar
-    await compositorRef.current.whenIdle()
-    setExportUrl(compositorRef.current.exportPNG())
+    if (!stageRef.current) return
+    // exportPNG espera renders en vuelo y fusiona los grupos en un PNG estático
+    setExportUrl(await stageRef.current.exportPNG())
     const encoded = encodeState(state)
     setShareUrl(`${window.location.origin}/${locale}/builder?s=${encoded}`)
   }
@@ -281,9 +282,6 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     setBurstId(b => b + 1)
   }
 
-  const handleCompositorReady = useCallback((c: AvatarCompositor) => {
-    compositorRef.current = c
-  }, [])
 
   // ── Empty state ───────────────────────────────────────
   if (!collection) {
@@ -330,7 +328,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
 
         {/* CANVAS — fixed height strip on mobile, flex-1 on desktop */}
         <div className="h-56 shrink-0 lg:h-auto lg:flex-1 flex items-center justify-center p-4 lg:p-10 relative">
-            <div className="relative h-full aspect-square max-h-full max-w-full fx-float">
+            <div className="relative h-full aspect-square max-h-full max-w-full">
               <div className="absolute inset-0 rounded-full blur-3xl fx-breathe" style={{ background: 'radial-gradient(circle, #7c3aed, transparent 70%)' }} />
               {/* Pop re-disparable: alternar entre dos clases con keyframes idénticos
                   reinicia la animación sin re-montar el canvas (que perdería su caché) */}
@@ -338,11 +336,12 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                 className={`relative w-full h-full rounded-[28px] lg:rounded-[36px] overflow-hidden ${popTick % 2 ? 'fx-pop-a' : 'fx-pop-b'}`}
                 style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06)' }}
               >
-                <AvatarCanvas
+                {/* Fondo/marco/arco estáticos; el personaje levita dentro del stage */}
+                <AvatarStage
+                  ref={stageRef}
                   state={state}
                   layers={layers.filter(l => !hiddenLayers.has(l.layerKey))}
                   assets={assets}
-                  onCompositorReady={handleCompositorReady}
                 />
               </div>
               {burstId > 0 && <ConfettiBurst key={burstId} />}
