@@ -11,7 +11,7 @@ const STANDARD_LAYERS = [
   { order_index: 6,  layer_key: 'hair-front',    label_es: 'Cabello frente', label_en: 'Front hair',   type: 'svg',   blend_mode: 'source-over', color_token: 'hair-color', optional: false, locked: false, visible_in_builder: false, opacity: 1 },
   { order_index: 7,  layer_key: 'acc-front',     label_es: 'Accesorio',      label_en: 'Accessory',    type: 'svg',   blend_mode: 'source-over', color_token: null,         optional: true,  locked: false, visible_in_builder: true,  opacity: 1 },
   { order_index: 8,  layer_key: 'mask',          label_es: 'Máscara',        label_en: 'Mask',         type: 'svg',   blend_mode: 'source-over', color_token: null,         optional: true,  locked: false, visible_in_builder: false, opacity: 1 },
-  { order_index: 9,  layer_key: 'effect-final',  label_es: 'Efecto final',   label_en: 'Final effect', type: 'svg',   blend_mode: 'source-over', color_token: null,         optional: true,  locked: false, visible_in_builder: false, opacity: 1 },
+  { order_index: 9,  layer_key: 'effect-final',  label_es: 'Efecto final',   label_en: 'Final effect', type: 'svg',   blend_mode: 'multiply',    color_token: null,         optional: true,  locked: false, visible_in_builder: false, opacity: 0.8 },
   { order_index: 10, layer_key: 'frame',         label_es: 'Marco',          label_en: 'Frame',        type: 'image', blend_mode: 'source-over', color_token: null,         optional: true,  locked: false, visible_in_builder: false, opacity: 1 },
 ]
 
