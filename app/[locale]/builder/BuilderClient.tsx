@@ -83,6 +83,21 @@ const HAIR_COLORS = [
 // Capas que admiten color extra cuando XTRA está activo
 const EXTRA_COLOR_LAYERS = new Set(['shirt', 'acc-front', 'mask'])
 
+// ── Ruta guiada (solo la primera visita) ──────────────────
+// Cada paso muestra el panel de una o más capas; los pasos cuyas capas
+// no existen o no tienen assets en la colección se omiten solos.
+const WIZARD_FLOW: { keys: string[]; emoji: string; es: string; en: string }[] = [
+  { keys: ['background'],   emoji: '🌅', es: 'Elige tu fondo',              en: 'Pick your background' },
+  { keys: ['frame'],        emoji: '🖼️', es: 'Elige el marco',              en: 'Pick the frame' },
+  { keys: ['arch'],         emoji: '🏛️', es: 'Elige el arco',               en: 'Pick the arch' },
+  { keys: ['head', 'body'], emoji: '🧑', es: 'Forma del rostro y cuerpo',   en: 'Face shape & body' },
+  { keys: ['shirt'],        emoji: '👕', es: 'Elige la camiseta',           en: 'Pick the shirt' },
+  { keys: ['hair-back'],    emoji: '💇', es: 'Corte y color de cabello',    en: 'Hair style & color' },
+  { keys: ['mask'],         emoji: '😷', es: 'Máscara (opcional)',          en: 'Mask (optional)' },
+]
+
+const WIZARD_DONE_KEY = 'avatarOS.wizardDone'
+
 // ── Helpers ───────────────────────────────────────────────
 function buildInitialState(collection: Collection | null, layers: Layer[], assets: Asset[], defaults: LayerDefault[]): AvatarState {
   const skinHex = defaults.find(d => d.tokenId === 'skin-color')?.defaultHex ?? '#C68642'
@@ -139,6 +154,13 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
   const [diceTick, setDiceTick] = useState(0)   // giro del dado al randomizar
   const [burstId,  setBurstId]  = useState(0)   // confetti al desbloquear keyword
 
+  // Ruta guiada — null = modo libre; se activa solo si nunca se completó
+  const [wizardStep, setWizardStep] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!localStorage.getItem(WIZARD_DONE_KEY)) setWizardStep(0)
+  }, [])
+
   // Load avatar state from URL ?s= param on first render
   useEffect(() => {
     const params  = new URLSearchParams(window.location.search)
@@ -158,6 +180,25 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
   // Tab activo: capas marcadas como visibles en el admin (excluyendo siempre hair-front)
   const visibleLayers = layers.filter(l => l.visibleInBuilder && !ALWAYS_HIDDEN.has(l.layerKey))
   const [activeCat, setActiveCat] = useState<string>(visibleLayers[0]?.layerKey ?? '')
+
+  // Pasos del wizard aplicables a esta colección (capa visible + con assets)
+  const wizardSteps = WIZARD_FLOW.filter(step =>
+    step.keys.some(k =>
+      visibleLayers.some(l => l.layerKey === k) &&
+      assets.some(a => a.layerKey === k)
+    )
+  )
+
+  function finishWizard() {
+    localStorage.setItem(WIZARD_DONE_KEY, '1')
+    setWizardStep(null)
+  }
+
+  function nextWizardStep() {
+    if (wizardStep === null) return
+    if (wizardStep >= wizardSteps.length - 1) { setBurstId(b => b + 1); finishWizard() }
+    else setWizardStep(wizardStep + 1)
+  }
 
   const hiddenLayers = getHiddenLayers(state, exceptions)
 
@@ -321,6 +362,84 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
           style={{ borderColor: 'rgba(255,255,255,0.05)', background: '#0b0b16' }}
         >
 
+          {wizardStep !== null && wizardSteps[wizardStep] ? (<>
+            {/* ── RUTA GUIADA (primera visita) ── */}
+            <div className="shrink-0 px-4 pt-3 pb-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-semibold" style={{ color: '#a78bfa' }}>
+                  {t('Paso', 'Step')} {wizardStep + 1} {t('de', 'of')} {wizardSteps.length}
+                </p>
+                <button onClick={finishWizard} className="text-[10px] fx-tap" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  {t('Saltar guía', 'Skip guide')} →
+                </button>
+              </div>
+              <div className="flex gap-1">
+                {wizardSteps.map((_, i) => (
+                  <div key={i} className="flex-1 h-1 rounded-full transition-all duration-300" style={{ background: i <= wizardStep ? '#7c3aed' : 'rgba(255,255,255,0.08)' }} />
+                ))}
+              </div>
+              <p className="text-sm font-semibold text-white mt-3">
+                {wizardSteps[wizardStep].emoji} {locale === 'en' ? wizardSteps[wizardStep].en : wizardSteps[wizardStep].es}
+              </p>
+            </div>
+
+            {/* Contenido del paso */}
+            <div key={`wiz-${wizardStep}`} className="flex-1 overflow-y-auto p-3 lg:p-4 space-y-5 fx-slide-up">
+              {wizardSteps[wizardStep].keys
+                .filter(k => visibleLayers.some(l => l.layerKey === k) && assets.some(a => a.layerKey === k))
+                .map(k => {
+                  const stepLayer = layers.find(l => l.layerKey === k)
+                  return (
+                    <div key={k}>
+                      {wizardSteps[wizardStep].keys.length > 1 && stepLayer && (
+                        <p className="text-[9px] font-semibold uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                          {locale === 'en' ? stepLayer.labelEn : stepLayer.labelEs}
+                        </p>
+                      )}
+                      <LayerPanel
+                        categoryKey={k}
+                        layers={layers}
+                        assets={assets}
+                        state={state}
+                        onSelectAsset={selectAsset}
+                        onSelectHair={selectHair}
+                        onSkinChange={hex => setToken('skin-color', hex)}
+                        onHairColorChange={hex => setToken('hair-color', hex)}
+                        onExtraColorChange={(key, hex) => setToken(key, hex)}
+                        locale={locale}
+                      />
+                    </div>
+                  )
+                })}
+            </div>
+
+            {/* Navegación del wizard */}
+            <div className="shrink-0 px-3 pb-3 pt-2 flex gap-2 lg:px-4 lg:pb-4">
+              {wizardStep > 0 && (
+                <button
+                  onClick={() => setWizardStep(wizardStep - 1)}
+                  className="px-4 py-2.5 lg:py-3 rounded-2xl text-sm font-medium fx-tap"
+                  style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+                >
+                  ←
+                </button>
+              )}
+              <button
+                onClick={nextWizardStep}
+                className="flex-1 text-sm font-semibold py-2.5 lg:py-3 rounded-2xl fx-shimmer fx-tap"
+                style={{
+                  background: 'linear-gradient(90deg,#6d28d9,#9333ea,#c084fc,#9333ea,#6d28d9)',
+                  color: 'white',
+                  boxShadow: '0 4px 20px rgba(124,58,237,0.35)',
+                }}
+              >
+                {wizardStep === wizardSteps.length - 1
+                  ? `✨ ${t('¡Listo! Personalizar todo', 'Done! Customize everything')}`
+                  : `${t('Siguiente', 'Next')} →`}
+              </button>
+            </div>
+          </>) : (<>
+
           {/* Tab bar — horizontally scrollable */}
           <div className="shrink-0 border-b overflow-x-auto" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
             <div className="flex gap-0.5 p-1.5 min-w-max">
@@ -392,6 +511,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
               ✨ {t('Crear mi PFP', 'Create my PFP')}
             </button>
           </div>
+          </>)}
         </aside>
       </div>
 
