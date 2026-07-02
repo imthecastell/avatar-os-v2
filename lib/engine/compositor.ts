@@ -131,10 +131,10 @@ export class AvatarCompositor {
     }
 
     if (layer.colorToken && tokens[layer.colorToken]) {
-      const role = layer.colorToken === 'skin-color' ? 'skin' : 'primary'
-      // Fall back to live detection if colorMap is empty (assets uploaded before CSS-detection fix)
+      // Always recolor the dominant color (role 'skin' = most frequent non-black/white).
+      // Hair SVGs: dominant = hair color. Head/body SVGs: dominant = skin color.
       const colorMap = asset.colorMap?.length ? asset.colorMap : detectEditableColors(svgText)
-      const originalColor = colorMap.find((c: { role: string }) => c.role === role)
+      const originalColor = colorMap.find((c: { role: string }) => c.role === 'skin')
       if (originalColor) {
         svgText = this.recolorSVG(svgText, (originalColor as { original: string }).original, tokens[layer.colorToken])
       }
