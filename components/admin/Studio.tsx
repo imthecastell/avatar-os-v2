@@ -98,6 +98,13 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const selectedLayer = collLayers.find(l => l.layerKey === selectedKey)
   const meta          = LAYER_META[selectedKey] ?? { emoji: '📁', accent: '#6b7280' }
 
+  // Duplicates: same layer_key more than once in this collection
+  const seenKeys = new Set<string>()
+  const duplicateLayers = collLayers.filter(l => {
+    if (seenKeys.has(l.layerKey)) return true
+    seenKeys.add(l.layerKey); return false
+  })
+
   // Active asset for transform controls
   const activeAssetId = (avatarState.selectedAssets[selectedKey] ?? null) as string | null
   const activeAsset   = activeAssetId ? assets.find(a => a.id === activeAssetId) ?? null : null
@@ -266,6 +273,16 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     window.location.reload()
   }
 
+  async function dedupLayers() {
+    if (!confirm(`Se eliminarán ${duplicateLayers.length} capa(s) duplicada(s) (se conserva la primera de cada key). ¿Continuar?`)) return
+    await Promise.all(
+      duplicateLayers.map(l =>
+        fetch(`/api/layers?id=${l.id}&layerKey=${l.layerKey}&collectionId=${collectionId}`, { method: 'DELETE' })
+      )
+    )
+    window.location.reload()
+  }
+
   async function deleteAsset(assetId: string) {
     if (!confirm('¿Eliminar este asset?')) return
     await fetch(`/api/assets?id=${assetId}`, { method: 'DELETE' })
@@ -338,6 +355,22 @@ export default function Studio({ collections, layers: initialLayers, assets, key
         <p className="px-4 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.2)' }}>
           Capas · {collLayers.length}{saving && ' · guardando…'}
         </p>
+
+        {/* Duplicate layers warning */}
+        {duplicateLayers.length > 0 && (
+          <div className="mx-2 mb-1 px-3 py-2 rounded-xl flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)' }}>
+            <span className="text-[9px] text-red-400 flex-1">
+              ⚠ {duplicateLayers.length} capa{duplicateLayers.length > 1 ? 's' : ''} duplicada{duplicateLayers.length > 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={dedupLayers}
+              className="text-[9px] font-semibold px-2 py-0.5 rounded-lg shrink-0"
+              style={{ background: 'rgba(239,68,68,0.3)', color: '#fca5a5' }}
+            >
+              Limpiar
+            </button>
+          </div>
+        )}
 
         {/* Seed prompt when no layers */}
         {collLayers.length === 0 && collectionId && (
