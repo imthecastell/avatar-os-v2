@@ -58,14 +58,14 @@ const LAYER_META: Record<string, { emoji: string; es: string; en: string }> = {
   'window':       { emoji: '🪟', es: 'Ventana',    en: 'Window' },
 }
 
-// Tonos de piel: 6 oficiales emoji + 3 fantasía
+// Tonos de piel: paleta oficial Twemoji (modificadores Fitzpatrick) + 3 fantasía
 const SKIN_TONES = [
-  { hex: '#FDDBB4', emoji: '🏻', fantasy: false },
-  { hex: '#F0C27F', emoji: '🏼', fantasy: false },
-  { hex: '#C68642', emoji: '🏽', fantasy: false },
-  { hex: '#8D5524', emoji: '🏾', fantasy: false },
-  { hex: '#4A2512', emoji: '🏿', fantasy: false },
-  { hex: '#FFCD00', emoji: '🟡', fantasy: false },
+  { hex: '#F7DECE', emoji: '🏻', fantasy: false },
+  { hex: '#F3D2A2', emoji: '🏼', fantasy: false },
+  { hex: '#D5AB88', emoji: '🏽', fantasy: false },
+  { hex: '#AF7E57', emoji: '🏾', fantasy: false },
+  { hex: '#7C533E', emoji: '🏿', fantasy: false },
+  { hex: '#FFDC5D', emoji: '🟡', fantasy: false },
   { hex: '#8B5CF6', emoji: '💜', fantasy: true },
   { hex: '#3B82F6', emoji: '💙', fantasy: true },
   { hex: '#10B981', emoji: '💚', fantasy: true },
@@ -105,7 +105,9 @@ function buildInitialState(collection: Collection | null, layers: Layer[], asset
   for (const layer of layers) {
     const def   = assets.find(a => a.layerKey === layer.layerKey && a.isDefault)
     const first = assets.find(a => a.layerKey === layer.layerKey && !a.keywordId)
-    selectedAssets[layer.layerKey] = layer.optional ? null : (def?.id ?? first?.id ?? null)
+    // Un default marcado en el admin se respeta aunque la capa sea opcional
+    // (ej. body: opcional pero el avatar sin cuello/brazos se ve roto)
+    selectedAssets[layer.layerKey] = def?.id ?? (layer.optional ? null : (first?.id ?? null))
   }
 
   return {
@@ -251,7 +253,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     for (const layer of layers) {
       const opts = assets.filter(a => a.layerKey === layer.layerKey && !a.keywordId)
       if (!opts.length) { sel[layer.layerKey] = null; continue }
-      if (layer.optional && Math.random() < 0.4) { sel[layer.layerKey] = null; continue }
+      // body nunca se omite: sin él la cabeza queda flotando sin cuello ni brazos
+      if (layer.optional && layer.layerKey !== 'body' && Math.random() < 0.4) { sel[layer.layerKey] = null; continue }
       sel[layer.layerKey] = opts[Math.floor(Math.random() * opts.length)].id
     }
     // Sincronizar hair-front con hair-back
@@ -326,8 +329,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
       {/* BODY — vertical on mobile, horizontal on desktop */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
 
-        {/* CANVAS — fixed height strip on mobile, flex-1 on desktop */}
-        <div className="h-56 shrink-0 lg:h-auto lg:flex-1 flex items-center justify-center p-4 lg:p-10 relative">
+        {/* CANVAS — protagonista: 42vh en móvil, flex-1 en desktop */}
+        <div className="h-[42vh] shrink-0 lg:h-auto lg:flex-1 flex items-center justify-center p-3 lg:p-10 relative">
             <div className="relative h-full aspect-square max-h-full max-w-full">
               <div className="absolute inset-0 rounded-full blur-3xl fx-breathe" style={{ background: 'radial-gradient(circle, #7c3aed, transparent 70%)' }} />
               {/* Pop re-disparable: alternar entre dos clases con keyframes idénticos
@@ -566,7 +569,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
 
         <div>
           <Divider label={t('Tono de piel', 'Skin tone')} />
-          <div className="grid grid-cols-5 gap-2 mt-3">
+          <div className="flex flex-wrap gap-2.5 mt-3">
             {SKIN_TONES.map(tone => {
               const active = state.tokens['skin-color'] === tone.hex
               return (
@@ -574,17 +577,17 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
                   key={tone.hex}
                   onClick={() => onSkinChange(tone.hex)}
                   title={tone.emoji}
-                  className="aspect-square rounded-2xl transition-all relative fx-tap"
+                  className="w-9 h-9 rounded-full transition-all relative fx-tap shrink-0"
                   style={{
                     background: tone.hex,
-                    outline: active ? '3px solid #a78bfa' : tone.fantasy ? '1px dashed rgba(255,255,255,0.15)' : '1px solid rgba(255,255,255,0.08)',
-                    outlineOffset: active ? 3 : 0,
-                    transform: active ? 'scale(1.12)' : undefined,
-                    boxShadow: active ? `0 0 16px ${tone.hex}80` : undefined,
+                    outline: active ? '2.5px solid #a78bfa' : tone.fantasy ? '1px dashed rgba(255,255,255,0.2)' : '1px solid rgba(255,255,255,0.1)',
+                    outlineOffset: active ? 2 : 0,
+                    transform: active ? 'scale(1.15)' : undefined,
+                    boxShadow: active ? `0 0 14px ${tone.hex}80` : undefined,
                   }}
                 >
                   {tone.fantasy && (
-                    <span className="absolute -top-1 -right-1 text-[9px] leading-none">✦</span>
+                    <span className="absolute -top-1 -right-1 text-[8px] leading-none">✦</span>
                   )}
                 </button>
               )
@@ -641,19 +644,19 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
         {/* COLOR */}
         <div>
           <Divider label={t('Color', 'Color')} />
-          <div className="grid grid-cols-6 gap-2 mt-3">
+          <div className="flex flex-wrap gap-2 mt-3">
             {HAIR_COLORS.map(hex => {
               const active = state.tokens['hair-color'] === hex
               return (
                 <button
                   key={hex}
                   onClick={() => onHairColorChange(hex)}
-                  className="aspect-square rounded-xl transition-all fx-tap"
+                  className="w-8 h-8 rounded-full transition-all fx-tap shrink-0"
                   style={{
                     background: hex,
-                    outline: active ? '3px solid #a78bfa' : '1px solid rgba(255,255,255,0.08)',
+                    outline: active ? '2.5px solid #a78bfa' : '1px solid rgba(255,255,255,0.1)',
                     outlineOffset: active ? 2 : 0,
-                    transform: active ? 'scale(1.12)' : undefined,
+                    transform: active ? 'scale(1.15)' : undefined,
                   }}
                 />
               )
@@ -747,7 +750,7 @@ function AssetGrid({ assets, selectedId, optional, onSelect }: {
   }
 
   return (
-    <div className="grid grid-cols-3 gap-2.5">
+    <div className="grid grid-cols-4 gap-2 lg:grid-cols-3 lg:gap-2.5">
       {optional && (
         <button
           onClick={() => onSelect(null)}
