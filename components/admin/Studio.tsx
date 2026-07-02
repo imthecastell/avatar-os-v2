@@ -1006,6 +1006,44 @@ export default function Studio({ collections, layers: initialLayers, assets, key
 
         {/* Canvas preview + controls — hidden when editing layer */}
         {!layerEditMode && (<>
+
+          {/* Selected layer actions strip */}
+          {selectedLayer && (
+            <div className="px-3 pt-3 pb-2.5 shrink-0 border-b" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+              <div className="flex items-center gap-2 px-2.5 py-2 rounded-xl" style={{ background: `${meta.accent}10`, border: `1px solid ${meta.accent}22` }}>
+                <span className="text-sm leading-none shrink-0">{meta.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold leading-tight truncate text-white">{selectedLayer.labelEs}</p>
+                  <p className="text-[9px] leading-tight truncate" style={{ color: 'rgba(255,255,255,0.28)' }}>{selectedLayer.layerKey}</p>
+                </div>
+                {/* Visibility toggle */}
+                <button
+                  onClick={() => updateVisibility(selectedLayer.id, !selectedLayer.visibleInBuilder)}
+                  title={selectedLayer.visibleInBuilder ? 'Visible en builder — click para ocultar' : 'Oculto en builder — click para mostrar'}
+                  className="flex items-center gap-1 text-[9px] font-semibold px-2 py-1 rounded-lg transition-all shrink-0"
+                  style={{
+                    background: selectedLayer.visibleInBuilder ? `${meta.accent}22` : 'rgba(255,255,255,0.05)',
+                    color:      selectedLayer.visibleInBuilder ? meta.accent : 'rgba(255,255,255,0.25)',
+                    outline:    selectedLayer.visibleInBuilder ? `1px solid ${meta.accent}44` : 'none',
+                  }}
+                >
+                  {selectedLayer.visibleInBuilder ? '👁 Builder' : '🙈 Oculto'}
+                </button>
+                {/* Edit */}
+                <button
+                  onClick={() => setLayerEditMode(true)}
+                  title="Editar capa"
+                  className="w-6 h-6 flex items-center justify-center rounded-lg text-[11px] shrink-0 transition-all"
+                  style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)' }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#c4b5fd'; e.currentTarget.style.background = 'rgba(196,181,253,0.1)' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                >
+                  ✏
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="px-3 pt-3 pb-2 shrink-0">
             <div className="flex items-center justify-between mb-2 px-1">
               <p className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.22)' }}>
