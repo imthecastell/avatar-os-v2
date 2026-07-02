@@ -9,25 +9,29 @@ interface Props {
   layers: Layer[]
   assets: Asset[]
   onCompositorReady?: (compositor: AvatarCompositor) => void
+  /** Resolución interna del canvas. 2048 para export final; menor para previews (menos memoria en iPad). */
+  size?: number
 }
 
-export default function AvatarCanvas({ state, layers, assets, onCompositorReady }: Props) {
+export default function AvatarCanvas({ state, layers, assets, onCompositorReady, size = 2048 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const compositorRef = useRef<AvatarCompositor | null>(null)
 
   useEffect(() => {
     if (!canvasRef.current) return
     const compositor = new AvatarCompositor()
-    compositor.init(canvasRef.current)
+    compositor.init(canvasRef.current, size)
     compositorRef.current = compositor
     onCompositorReady?.(compositor)
 
     return () => compositor.clearCache()
-  }, [onCompositorReady])
+  }, [onCompositorReady, size])
 
   useEffect(() => {
     if (!compositorRef.current) return
-    compositorRef.current.render(state, layers, assets)
+    compositorRef.current.render(state, layers, assets).catch(err =>
+      console.warn('[AvatarCanvas] render error', err)
+    )
   }, [state, layers, assets])
 
   return (

@@ -9,8 +9,13 @@ export class AvatarCompositor {
   private size = 2048
   private renderCache = new Map<string, ImageBitmap>()
   private svgCache    = new Map<string, string>()
+  // Safari (iPad) mata la página si el consumo de memoria crece sin límite.
+  // Cada bitmap cacheado pesa size²×4 bytes (16MB a 2048px), así que el caché es LRU acotado.
+  private maxCacheEntries = 12
+  private renderToken = 0
 
-  init(canvas: HTMLCanvasElement) {
+  init(canvas: HTMLCanvasElement, size = 2048) {
+    this.size = size
     this.canvas = canvas
     this.canvas.width  = this.size
     this.canvas.height = this.size
@@ -18,6 +23,9 @@ export class AvatarCompositor {
   }
 
   async render(state: AvatarState, layers: Layer[], assets: Asset[]) {
+    // Si llega un render más nuevo mientras este espera un await, este se aborta
+    // para no intercalar draws de dos renders sobre el mismo canvas.
+    const token = ++this.renderToken
     this.ctx.clearRect(0, 0, this.size, this.size)
 
     // Sort by orderIndex, then force effect-final to always render last (on top of everything)
@@ -35,6 +43,7 @@ export class AvatarCompositor {
     }
 
     for (const layer of sortedLayers) {
+      if (token !== this.renderToken) return
       const assetId = state.selectedAssets[layer.layerKey]
       if (!assetId) continue
 
@@ -44,35 +53,35 @@ export class AvatarCompositor {
       // Skip assets that are being used as auto-masks by another layer
       if (autoMasks.has(asset.id)) continue
 
-      // If this asset has a mask, apply it to an offscreen canvas
-      if (asset.maskAssetId) {
-        const maskAsset = assets.find(a => a.id === asset.maskAssetId)
-        if (maskAsset) {
-          await this.drawWithMask(asset, maskAsset, layer, state.tokens)
-          continue
+      // Un asset roto (404, SVG inválido) no debe tumbar el render completo
+      try {
+        if (asset.maskAssetId) {
+          const maskAsset = assets.find(a => a.id === asset.maskAssetId)
+          if (maskAsset) {
+            await this.drawWithMask(asset, maskAsset, layer, state.tokens)
+            continue
+          }
         }
-      }
 
-      this.ctx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation
-      this.ctx.globalAlpha = layer.opacity ?? 1
-      await this.drawAsset(asset, layer, state.tokens)
-      this.ctx.globalAlpha = 1
-      this.ctx.globalCompositeOperation = 'source-over'
+        this.ctx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation
+        this.ctx.globalAlpha = layer.opacity ?? 1
+        await this.drawAsset(asset, layer, state.tokens)
+      } catch (err) {
+        console.warn(`[compositor] fallo al dibujar capa "${layer.layerKey}"`, err)
+      } finally {
+        this.ctx.globalAlpha = 1
+        this.ctx.globalCompositeOperation = 'source-over'
+      }
     }
   }
 
   // ── Draw asset with an auto-mask (hat masks hair underneath) ──────────
   private async drawWithMask(asset: Asset, maskAsset: Asset, layer: Layer, tokens: AvatarState['tokens']) {
-    // 1. Draw the main asset onto an offscreen canvas
-    const oc  = new OffscreenCanvas(this.size, this.size)
-    const ctx = oc.getContext('2d')!
-
     const bitmap = await this.getBitmap(asset, layer, tokens)
-    const { scale, offsetX, offsetY } = asset.transform
+    const { scale = 1, offsetX = 0, offsetY = 0 } = asset.transform ?? {}
     const [sw, sh] = this.fitDims(bitmap, scale)
     const x = (this.size - sw) / 2 + offsetX
     const y = (this.size - sh) / 2 + offsetY
-    ctx.drawImage(bitmap, x, y, sw, sh)
 
     const maskBitmap = await this.getBitmap(maskAsset, layer, tokens)
     this.ctx.globalCompositeOperation = 'destination-out'
@@ -110,12 +119,18 @@ export class AvatarCompositor {
     return [bitmap.width * fit, bitmap.height * fit]
   }
 
-  // ── Get or build a cached ImageBitmap for any asset ───────────────────
+  // ── Get or build a cached ImageBitmap for any asset (LRU acotado) ─────
   private async getBitmap(asset: Asset, layer: Layer, tokens: AvatarState['tokens']): Promise<ImageBitmap> {
     const tokenValue = layer.colorToken ? tokens[layer.colorToken] : null
     const cacheKey   = `${asset.id}::${tokenValue ?? ''}`
 
-    if (this.renderCache.has(cacheKey)) return this.renderCache.get(cacheKey)!
+    const cached = this.renderCache.get(cacheKey)
+    if (cached) {
+      // Refrescar recencia: el Map itera en orden de inserción
+      this.renderCache.delete(cacheKey)
+      this.renderCache.set(cacheKey, cached)
+      return cached
+    }
 
     let bitmap: ImageBitmap
 
@@ -126,6 +141,14 @@ export class AvatarCompositor {
     }
 
     this.renderCache.set(cacheKey, bitmap)
+
+    // Evict del más viejo cuando se supera el límite
+    while (this.renderCache.size > this.maxCacheEntries) {
+      const oldestKey = this.renderCache.keys().next().value as string
+      this.renderCache.get(oldestKey)?.close()
+      this.renderCache.delete(oldestKey)
+    }
+
     return bitmap
   }
 

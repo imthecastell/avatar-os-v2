@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import type { Layer, Asset, Collection, AvatarState, Keyword, AssetTransform } from '@/types'
@@ -109,8 +109,12 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const dragOverRef   = useRef<number | null>(null)
   const hasDraggedRef = useRef(false)
 
-  // Derive filtered lists
-  const collLayers   = layers.filter(l => !collectionId || l.collectionId === collectionId)
+  // Derive filtered lists — memoizados para que AvatarCanvas no re-renderice
+  // el canvas completo con cada cambio de estado no relacionado (menús, selección…)
+  const collLayers = useMemo(
+    () => layers.filter(l => !collectionId || l.collectionId === collectionId),
+    [layers, collectionId]
+  )
   const layerAssets  = assets.filter(a => a.collectionId === collectionId && a.layerKey === selectedKey)
   const selectedLayer = collLayers.find(l => l.layerKey === selectedKey)
   const meta          = LAYER_META[selectedKey] ?? { emoji: '📁', accent: '#6b7280' }
@@ -130,8 +134,11 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     : { scale: 1, offsetX: 0, offsetY: 0 }
 
   // Merge transform overrides into assets array for live canvas preview
-  const canvasAssets = assets.map(a =>
-    transformOverrides[a.id] ? { ...a, transform: transformOverrides[a.id] } : a
+  const canvasAssets = useMemo(
+    () => assets.map(a =>
+      transformOverrides[a.id] ? { ...a, transform: transformOverrides[a.id] } : a
+    ),
+    [assets, transformOverrides]
   )
 
   // ── Pointer-based drag (works on mouse + touch) ──────
@@ -181,46 +188,53 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     nextLayers.splice(globalTo, 0, moved)
     setLayers(nextLayers)
     setSaving(true)
-    for (let idx = 0; idx < nextLayers.length; idx++) {
-      await fetch('/api/layers', {
+    await Promise.all(nextLayers.map((l, idx) =>
+      fetch('/api/layers', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: nextLayers[idx].id, order_index: idx }),
+        body: JSON.stringify({ id: l.id, order_index: idx }),
       })
-    }
+    ))
     setSaving(false)
   }
 
   // ── Layer property update ────────────────────────────
+  // Un guardado fallido (p.ej. columna faltante por migración sin aplicar) debe
+  // avisar y revertir, no fallar en silencio dejando la UI desincronizada del DB.
+  async function putLayer(layerId: string, patch: Record<string, unknown>) {
+    const res = await fetch('/api/layers', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: layerId, ...patch }),
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({} as { error?: string }))
+      alert(`No se pudo guardar la capa: ${d.error ?? `HTTP ${res.status}`}\n\nSi el error menciona una columna inexistente, falta aplicar una migración SQL en Supabase.`)
+      window.location.reload()
+    }
+  }
+
   async function updateColorToken(layerId: string, token: string | null) {
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, colorToken: token } : l))
-    await fetch('/api/layers', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: layerId, color_token: token }),
-    })
+    await putLayer(layerId, { color_token: token })
   }
 
   async function updateBlendMode(layerId: string, blendMode: string) {
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, blendMode } : l))
-    await fetch('/api/layers', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: layerId, blend_mode: blendMode }),
-    })
+    await putLayer(layerId, { blend_mode: blendMode })
   }
 
-  async function updateOpacity(layerId: string, opacity: number) {
+  // Opacidad: el slider actualiza solo el estado local en cada tick;
+  // el PUT se dispara una única vez al soltar (commitOpacity).
+  function setOpacityLocal(layerId: string, opacity: number) {
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, opacity } : l))
-    await fetch('/api/layers', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: layerId, opacity }),
-    })
+  }
+
+  async function commitOpacity(layerId: string, opacity: number) {
+    await putLayer(layerId, { opacity })
   }
 
   async function updateVisibility(layerId: string, visible: boolean) {
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, visibleInBuilder: visible } : l))
-    await fetch('/api/layers', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: layerId, visible_in_builder: visible }),
-    })
+    await putLayer(layerId, { visible_in_builder: visible })
   }
 
   // ── Avatar mutations ──────────────────────────────────
@@ -273,7 +287,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
 
   // ── Asset actions ─────────────────────────────────────
   async function setDefault(assetId: string) {
-    const prev = assets.filter(a => a.layerKey === selectedKey && a.isDefault)
+    const prev = assets.filter(a => a.collectionId === collectionId && a.layerKey === selectedKey && a.isDefault)
     for (const a of prev) {
       await fetch('/api/assets', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -316,9 +330,11 @@ export default function Studio({ collections, layers: initialLayers, assets, key
 
   async function dedupLayers() {
     if (!confirm(`Se eliminarán ${duplicateLayers.length} capa(s) duplicada(s) (se conserva la primera de cada key). ¿Continuar?`)) return
+    // Solo se borra la fila de la capa (sin layerKey/collectionId): los assets
+    // comparten layer_key con la capa que se conserva y NO deben borrarse.
     await Promise.all(
       duplicateLayers.map(l =>
-        fetch(`/api/layers?id=${l.id}&layerKey=${l.layerKey}&collectionId=${collectionId}`, { method: 'DELETE' })
+        fetch(`/api/layers?id=${l.id}`, { method: 'DELETE' })
       )
     )
     window.location.reload()
@@ -583,7 +599,9 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                 type="range"
                 min={0} max={1} step={0.01}
                 value={selectedLayer.opacity ?? 1}
-                onChange={e => updateOpacity(selectedLayer.id, parseFloat(e.target.value))}
+                onChange={e => setOpacityLocal(selectedLayer.id, parseFloat(e.target.value))}
+                onPointerUp={e => commitOpacity(selectedLayer.id, parseFloat((e.target as HTMLInputElement).value))}
+                onKeyUp={e => commitOpacity(selectedLayer.id, parseFloat((e.target as HTMLInputElement).value))}
                 className="w-full h-1 rounded-full appearance-none cursor-pointer"
                 style={{
                   accentColor: '#7c3aed',
@@ -1065,6 +1083,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                 state={avatarState}
                 layers={collLayers}
                 assets={canvasAssets}
+                size={1024}
               />
             </div>
           </div>
