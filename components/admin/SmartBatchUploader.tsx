@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
-import { flushSync } from 'react-dom'
 import { detectLayerFromFilename } from '@/lib/engine/asset-classifier'
 import type { Collection, Layer } from '@/types'
 
@@ -130,61 +129,68 @@ export default function SmartBatchUploader({ collections, layers, onDone }: Prop
     setProgress(init)
 
     for (const group of groups) {
-      // 1. Create layer if new
-      if (group.isNew) {
-        const maxOrder = layers.length
-          ? Math.max(...layers.map(l => l.orderIndex)) + 1
-          : groups.indexOf(group)
+      try {
+        // 1. Create layer if new
+        if (group.isNew) {
+          const maxOrder = layers.length
+            ? Math.max(...layers.map(l => l.orderIndex)) + 1
+            : groups.indexOf(group)
 
-        const res = await fetch('/api/layers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            collection_id: collectionId,
-            order_index:   maxOrder,
-            layer_key:     group.layerKey,
-            label_es:      group.newLabelEs || group.baseName,
-            label_en:      group.newLabelEn || group.baseName,
-            type:          'auto',
-            blend_mode:    'normal',
-            optional:      group.optional,
-            locked:        false,
-          }),
-        })
-
-        if (!res.ok) {
-          const d = await res.json()
-          setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], error: d.error ?? 'Error creando capa', done: true } }))
-          continue
-        }
-      }
-
-      // 2. Upload each file in the group
-      let uploaded = 0
-      for (const file of group.files) {
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('layer', group.layerKey)
-        fd.append('collectionId', collectionId)
-
-        const res  = await fetch('/api/assets/upload', { method: 'POST', body: fd })
-        const data = await res.json()
-
-        if (data.error) {
-          flushSync(() => {
-            setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], error: data.error } }))
+          const res = await fetch('/api/layers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              collection_id: collectionId,
+              order_index:   maxOrder,
+              layer_key:     group.layerKey,
+              label_es:      group.newLabelEs || group.baseName,
+              label_en:      group.newLabelEn || group.baseName,
+              type:          'auto',
+              blend_mode:    'source-over',
+              optional:      group.optional,
+              locked:        false,
+            }),
           })
-          break
+
+          if (!res.ok) {
+            const d = await res.json().catch(() => ({}))
+            setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], error: d.error ?? `HTTP ${res.status}`, done: true } }))
+            continue
+          }
         }
 
-        uploaded++
-        flushSync(() => {
-          setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], uploaded } }))
-        })
-      }
+        // 2. Upload each file in the group
+        let uploaded = 0
+        let groupError: string | null = null
 
-      await Promise.resolve() // separate render before marking done
-      setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], done: true } }))
+        for (const file of group.files) {
+          const fd = new FormData()
+          fd.append('file', file)
+          fd.append('layer', group.layerKey)
+          fd.append('collectionId', collectionId)
+
+          const res  = await fetch('/api/assets/upload', { method: 'POST', body: fd })
+          const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+
+          if (data.error) {
+            groupError = data.error
+            break
+          }
+
+          uploaded++
+          // yield to the event loop so React can re-render progress
+          setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], uploaded } }))
+          await new Promise<void>(r => setTimeout(r, 0))
+        }
+
+        setProgress(prev => ({
+          ...prev,
+          [group.id]: { ...prev[group.id], uploaded, error: groupError, done: true },
+        }))
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Error desconocido'
+        setProgress(prev => ({ ...prev, [group.id]: { ...prev[group.id], error: msg, done: true } }))
+      }
     }
 
     setStage('done')
@@ -230,22 +236,37 @@ export default function SmartBatchUploader({ collections, layers, onDone }: Prop
   }
 
   // done
-  const total    = groups.reduce((s, g) => s + g.files.length, 0)
+  const uploaded  = Object.values(progress).reduce((s, p) => s + p.uploaded, 0)
   const newLayers = groups.filter(g => g.isNew).length
-  const errors   = Object.values(progress).filter(p => p.error).length
+  const errGroups = groups.filter(g => progress[g.id]?.error)
 
   return (
-    <div className="h-full flex flex-col items-center justify-center gap-5 p-6">
-      <div className="text-5xl">{errors ? '⚠️' : '✅'}</div>
-      <div className="text-center">
-        <p className="text-white font-semibold text-sm mb-1">
-          {errors ? `${errors} grupo(s) con error` : `${total} assets subidos`}
-        </p>
-        <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-          {newLayers} capa(s) nueva(s) creada(s) · {groups.length} grupo(s) procesados
-        </p>
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center gap-5 p-6">
+        <div className="text-5xl">{errGroups.length ? '⚠️' : '✅'}</div>
+        <div className="text-center">
+          <p className="text-white font-semibold text-sm mb-1">
+            {errGroups.length
+              ? `${errGroups.length} grupo(s) fallaron`
+              : `${uploaded} asset(s) subidos`}
+          </p>
+          <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            {newLayers} capa(s) nueva(s) · {groups.length} grupo(s) procesados
+          </p>
+        </div>
+
+        {errGroups.length > 0 && (
+          <div className="w-full max-w-sm space-y-2">
+            {errGroups.map(g => (
+              <div key={g.id} className="rounded-xl px-3 py-2.5 text-[11px]" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5' }}>
+                <span className="font-semibold">{g.baseName}:</span> {progress[g.id]?.error}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      <div className="flex gap-3">
+
+      <div className="shrink-0 flex gap-3 justify-center pb-6 px-6">
         <button
           onClick={() => { onDone?.(); reset() }}
           className="text-xs font-semibold px-5 py-2.5 rounded-xl"
