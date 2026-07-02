@@ -20,6 +20,7 @@ export interface Layer {
   locked:           boolean
   pairedWith:       string | null
   visibleInBuilder: boolean
+  opacity:          number   // 0.0 – 1.0, default 1
 }
 
 export interface AssetTransform {

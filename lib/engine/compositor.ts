@@ -54,7 +54,9 @@ export class AvatarCompositor {
       }
 
       this.ctx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation
+      this.ctx.globalAlpha = layer.opacity ?? 1
       await this.drawAsset(asset, layer, state.tokens)
+      this.ctx.globalAlpha = 1
       this.ctx.globalCompositeOperation = 'source-over'
     }
   }
@@ -82,7 +84,9 @@ export class AvatarCompositor {
     this.ctx.globalCompositeOperation = 'source-over'
 
     this.ctx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation
+    this.ctx.globalAlpha = layer.opacity ?? 1
     this.ctx.drawImage(bitmap, x, y, sw, sh)
+    this.ctx.globalAlpha = 1
     this.ctx.globalCompositeOperation = 'source-over'
   }
 

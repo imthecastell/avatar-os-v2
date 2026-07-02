@@ -38,6 +38,7 @@ export function mapLayer(r: Record<string, unknown>): Layer {
     locked:           r.locked as boolean,
     pairedWith:       r.paired_with as string | null,
     visibleInBuilder: (r.visible_in_builder as boolean) ?? true,
+    opacity:          (r.opacity as number) ?? 1,
   }
 }
 

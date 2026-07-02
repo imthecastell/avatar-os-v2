@@ -207,6 +207,14 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     })
   }
 
+  async function updateOpacity(layerId: string, opacity: number) {
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, opacity } : l))
+    await fetch('/api/layers', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: layerId, opacity }),
+    })
+  }
+
   async function updateVisibility(layerId: string, visible: boolean) {
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, visibleInBuilder: visible } : l))
     await fetch('/api/layers', {
@@ -559,6 +567,29 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                   ✦ Siempre renderiza sobre todas las capas
                 </p>
               )}
+            </div>
+
+            {/* Opacity */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between px-1">
+                <p className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                  Opacidad
+                </p>
+                <p className="text-[9px] tabular-nums font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  {Math.round((selectedLayer.opacity ?? 1) * 100)}%
+                </p>
+              </div>
+              <input
+                type="range"
+                min={0} max={1} step={0.01}
+                value={selectedLayer.opacity ?? 1}
+                onChange={e => updateOpacity(selectedLayer.id, parseFloat(e.target.value))}
+                className="w-full h-1 rounded-full appearance-none cursor-pointer"
+                style={{
+                  accentColor: '#7c3aed',
+                  background: `linear-gradient(to right, #7c3aed ${(selectedLayer.opacity ?? 1) * 100}%, rgba(255,255,255,0.1) 0%)`,
+                }}
+              />
             </div>
 
           </div>
