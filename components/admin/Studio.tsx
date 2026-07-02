@@ -6,6 +6,8 @@ import Image from 'next/image'
 import type { Layer, Asset, Collection, AvatarState, Keyword, AssetTransform } from '@/types'
 import AssetInspector from '@/components/admin/AssetInspector'
 import SmartBatchUploader from '@/components/admin/SmartBatchUploader'
+import LayerEditorPanel from '@/components/admin/LayerEditorPanel'
+import { thumbUrl } from '@/lib/thumb'
 
 const AvatarCanvas = dynamic(() => import('@/components/builder/AvatarCanvas'), { ssr: false })
 
@@ -82,6 +84,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set())
   const [transformOverrides, setTransformOverrides] = useState<Record<string, AssetTransform>>({})
   const [openMenuId, setOpenMenuId]               = useState<string | null>(null)
+  const [layerEditMode, setLayerEditMode]         = useState(false)
 
   const fileRef       = useRef<HTMLInputElement>(null)
   const layerListRef  = useRef<HTMLDivElement>(null)
@@ -401,7 +404,17 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                 }}>
                   {count}
                 </span>
-                {/* Delete layer button — visible on hover */}
+                {/* Edit + Delete buttons — visible on hover */}
+                <button
+                  onClick={e => { e.stopPropagation(); setSelectedKey(layer.layerKey); setLayerEditMode(true) }}
+                  className="hidden group-hover/layer:flex w-5 h-5 shrink-0 items-center justify-center rounded-lg text-[9px] transition-colors"
+                  style={{ color: 'rgba(255,255,255,0.25)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#c4b5fd')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.25)')}
+                  title={`Editar capa "${layer.labelEs}"`}
+                >
+                  ✏
+                </button>
                 <button
                   onClick={e => { e.stopPropagation(); deleteLayer(layer.id, layer.layerKey, layer.labelEs) }}
                   className="hidden group-hover/layer:flex w-5 h-5 shrink-0 items-center justify-center rounded-lg text-[9px] transition-colors"
@@ -648,7 +661,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                     >
                       {asset.cdnUrl ? (
                         <Image
-                          src={asset.cdnUrl}
+                          src={thumbUrl(asset.cdnUrl, asset.fileType)}
                           alt={asset.name}
                           width={160} height={160}
                           className="w-full h-full object-cover"
@@ -763,38 +776,53 @@ export default function Studio({ collections, layers: initialLayers, assets, key
       </section>
 
       {/* ══════════════════════════════════════════════════
-          RIGHT — Live preview
+          RIGHT — Live preview / Layer editor
       ══════════════════════════════════════════════════ */}
       <aside className="w-[260px] flex flex-col border-l shrink-0" style={{ borderColor: 'rgba(255,255,255,0.05)', background: '#0b0b16' }}>
 
-        {/* Canvas preview */}
-        <div className="px-3 pt-3 pb-2 shrink-0">
-          <div className="flex items-center justify-between mb-2 px-1">
-            <p className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.22)' }}>
-              Vista previa
-            </p>
-            <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>
-              {collLayers.filter(l => avatarState.selectedAssets[l.layerKey]).length}/{collLayers.length} capas
-            </p>
-          </div>
-          <div
-            className="w-full aspect-square rounded-[20px] overflow-hidden"
-            style={{
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.06)',
-            }}
-          >
-            <AvatarCanvas
-              state={avatarState}
-              layers={collLayers}
-              assets={canvasAssets}
-            />
-          </div>
-        </div>
+        {/* Layer editor mode */}
+        {layerEditMode && selectedLayer && (
+          <LayerEditorPanel
+            layerId={selectedLayer.id}
+            layerKey={selectedLayer.layerKey}
+            layerName={selectedLayer.labelEs}
+            assets={assets.filter(a => a.collectionId === collectionId && a.layerKey === selectedLayer.layerKey)}
+            keywords={keywords}
+            collectionId={collectionId}
+            onBack={() => setLayerEditMode(false)}
+            onUpdated={() => window.location.reload()}
+          />
+        )}
 
-        {/* Controls */}
-        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
+        {/* Canvas preview + controls — hidden when editing layer */}
+        {!layerEditMode && (<>
+          <div className="px-3 pt-3 pb-2 shrink-0">
+            <div className="flex items-center justify-between mb-2 px-1">
+              <p className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.22)' }}>
+                Vista previa
+              </p>
+              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>
+                {collLayers.filter(l => avatarState.selectedAssets[l.layerKey]).length}/{collLayers.length} capas
+              </p>
+            </div>
+            <div
+              className="w-full aspect-square rounded-[20px] overflow-hidden"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}
+            >
+              <AvatarCanvas
+                state={avatarState}
+                layers={collLayers}
+                assets={canvasAssets}
+              />
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
           <div className="border-t pt-4 space-y-4" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
 
             {/* Skin */}
@@ -900,6 +928,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
             )}
           </div>
         </div>
+        </>)}
       </aside>
 
       {/* ══════════════════════════════════════════════════

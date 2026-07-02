@@ -96,6 +96,7 @@ export interface Keyword {
   label:        string
   hint:         string | null
   active:       boolean
+  isMaster:     boolean
 }
 
 export interface AvatarState {

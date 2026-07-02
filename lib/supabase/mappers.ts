@@ -82,5 +82,6 @@ export function mapKeyword(r: Record<string, unknown>): Keyword {
     label:        r.label as string,
     hint:         r.hint as string | null,
     active:       r.active as boolean,
+    isMaster:     (r.is_master as boolean) ?? false,
   }
 }
