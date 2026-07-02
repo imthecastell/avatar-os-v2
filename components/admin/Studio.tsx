@@ -32,6 +32,21 @@ const COLOR_TOKENS = [
   { id: 'hair-color', label: '💇 Pelo', title: 'Color de cabello' },
 ]
 
+const BLEND_MODES = [
+  { value: 'source-over', label: 'Normal'      },
+  { value: 'screen',      label: 'Screen'      },
+  { value: 'multiply',    label: 'Multiply'    },
+  { value: 'overlay',     label: 'Overlay'     },
+  { value: 'soft-light',  label: 'Soft Light'  },
+  { value: 'hard-light',  label: 'Hard Light'  },
+  { value: 'color-dodge', label: 'Color Dodge' },
+  { value: 'color-burn',  label: 'Color Burn'  },
+  { value: 'difference',  label: 'Difference'  },
+  { value: 'exclusion',   label: 'Exclusion'   },
+  { value: 'luminosity',  label: 'Luminosity'  },
+  { value: 'color',       label: 'Color'       },
+]
+
 const SKIN_TONES = [
   '#FDDBB4','#F9C7B6','#EBA882','#D4895A','#B86A35','#8B4513','#5C2D0A','#3B1A08',
 ]
@@ -179,6 +194,14 @@ export default function Studio({ collections, layers: initialLayers, assets, key
     await fetch('/api/layers', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: layerId, color_token: token }),
+    })
+  }
+
+  async function updateBlendMode(layerId: string, blendMode: string) {
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, blendMode } : l))
+    await fetch('/api/layers', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: layerId, blend_mode: blendMode }),
     })
   }
 
@@ -465,32 +488,59 @@ export default function Studio({ collections, layers: initialLayers, assets, key
           })}
         </div>
 
-        {/* Color token selector — shown when a layer is selected */}
+        {/* Color token + blend mode — shown when a layer is selected */}
         {selectedLayer && (
-          <div className="px-3 pb-2 border-t pt-3 shrink-0 space-y-1.5" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-            <p className="text-[9px] font-semibold uppercase tracking-widest px-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
-              Token de color
-            </p>
-            <div className="flex gap-1.5">
-              {COLOR_TOKENS.map(tok => {
-                const active = selectedLayer.colorToken === tok.id
-                return (
-                  <button
-                    key={String(tok.id)}
-                    onClick={() => updateColorToken(selectedLayer.id, tok.id)}
-                    title={tok.title}
-                    className="flex-1 text-[10px] font-semibold py-1.5 rounded-lg transition-all"
-                    style={{
-                      background: active ? 'rgba(124,58,237,0.6)' : 'rgba(255,255,255,0.05)',
-                      color:      active ? 'white' : 'rgba(255,255,255,0.35)',
-                      outline:    active ? '1px solid rgba(124,58,237,0.8)' : 'none',
-                    }}
-                  >
-                    {tok.label}
-                  </button>
-                )
-              })}
+          <div className="px-3 pb-2 border-t pt-3 shrink-0 space-y-3" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+
+            {/* Color token */}
+            <div className="space-y-1.5">
+              <p className="text-[9px] font-semibold uppercase tracking-widest px-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                Token de color
+              </p>
+              <div className="flex gap-1.5">
+                {COLOR_TOKENS.map(tok => {
+                  const active = selectedLayer.colorToken === tok.id
+                  return (
+                    <button
+                      key={String(tok.id)}
+                      onClick={() => updateColorToken(selectedLayer.id, tok.id)}
+                      title={tok.title}
+                      className="flex-1 text-[10px] font-semibold py-1.5 rounded-lg transition-all"
+                      style={{
+                        background: active ? 'rgba(124,58,237,0.6)' : 'rgba(255,255,255,0.05)',
+                        color:      active ? 'white' : 'rgba(255,255,255,0.35)',
+                        outline:    active ? '1px solid rgba(124,58,237,0.8)' : 'none',
+                      }}
+                    >
+                      {tok.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
+
+            {/* Blend mode */}
+            <div className="space-y-1.5">
+              <p className="text-[9px] font-semibold uppercase tracking-widest px-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                Modo de mezcla
+              </p>
+              <select
+                value={selectedLayer.blendMode ?? 'source-over'}
+                onChange={e => updateBlendMode(selectedLayer.id, e.target.value)}
+                className="w-full text-[10px] rounded-lg px-2 py-1.5 border focus:outline-none focus:border-violet-500 transition-colors"
+                style={{ background: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)', color: 'white' }}
+              >
+                {BLEND_MODES.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+              {selectedLayer.layerKey === 'effect-final' && (
+                <p className="text-[9px] px-1" style={{ color: 'rgba(167,139,250,0.6)' }}>
+                  ✦ Siempre renderiza sobre todas las capas
+                </p>
+              )}
+            </div>
+
           </div>
         )}
 

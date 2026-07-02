@@ -20,7 +20,10 @@ export class AvatarCompositor {
   async render(state: AvatarState, layers: Layer[], assets: Asset[]) {
     this.ctx.clearRect(0, 0, this.size, this.size)
 
-    const sortedLayers = [...layers].sort((a, b) => a.orderIndex - b.orderIndex)
+    // Sort by orderIndex, then force effect-final to always render last (on top of everything)
+    const baseLayers   = [...layers].sort((a, b) => a.orderIndex - b.orderIndex).filter(l => l.layerKey !== 'effect-final')
+    const effectLayers = [...layers].filter(l => l.layerKey === 'effect-final')
+    const sortedLayers = [...baseLayers, ...effectLayers]
 
     // Build a set of active mask asset IDs to skip them as regular layers
     const autoMasks = new Set<string>()
