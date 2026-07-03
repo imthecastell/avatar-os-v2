@@ -1,4 +1,4 @@
-import type { Asset, Layer, LayerException, LayerDefault, Keyword, Collection, SiteSettings, AvatarState } from '@/types'
+import type { Asset, Layer, LayerException, LayerDefault, Keyword, Collection, SiteSettings, AvatarState, ColorUnlock } from '@/types'
 
 export function mapAsset(r: Record<string, unknown>): Asset {
   return {
@@ -74,6 +74,19 @@ export function mapCollection(r: Record<string, unknown>): Collection {
     name:   r.name as string,
     number: r.number as number,
     active: r.active as boolean,
+  }
+}
+
+export function mapColorUnlock(r: Record<string, unknown>): ColorUnlock {
+  return {
+    id:             r.id as string,
+    collectionId:   r.collection_id as string,
+    keywordId:      r.keyword_id as string | null,
+    scopeAssetId:   r.scope_asset_id as string | null,
+    targetLayerKey: r.target_layer_key as string,
+    targetRole:     r.target_role as string,
+    mode:           (r.mode as 'wheel' | 'swatches') ?? 'wheel',
+    swatches:       (r.swatches as string[]) ?? null,
   }
 }
 

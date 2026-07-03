@@ -16,7 +16,7 @@ interface Props {
   layers:     Layer[]
   assets:     Asset[]
   settings:   SiteSettings | null
-  onEnter:    (unlock: { keywordId: string; isXtra: boolean } | null) => void
+  onEnter:    (unlock: { keywordId: string } | null) => void
 }
 
 const SOCIAL_ICONS: Record<string, string> = {
@@ -50,9 +50,7 @@ export default function WelcomeScreen({ locale, collection, layers, assets, sett
     const res  = await fetch(`/api/keywords?keyword=${encodeURIComponent(keyword.trim().toUpperCase())}&collectionId=${collection.id}`)
     const data = await res.json()
     if (data.valid) {
-      const isXtra = (data.keyword.label as string)?.toLowerCase().includes('xtra') ||
-                     (data.keyword.keyword as string)?.toLowerCase().includes('xtra')
-      onEnter({ keywordId: data.keyword.id, isXtra })
+      onEnter({ keywordId: data.keyword.id })
     } else {
       setStatus('err')
       setTimeout(() => setStatus('idle'), 2000)

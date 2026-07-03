@@ -2,17 +2,25 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import type { Asset, Keyword, AssetTransform } from '@/types'
+import type { Asset, Keyword, AssetTransform, Layer, ColorUnlock } from '@/types'
 
 interface Props {
-  asset:    Asset
-  assets:   Asset[]           // para el selector de máscara
-  keywords: Keyword[]
-  onClose:  () => void
-  onSaved:  () => void        // recarga la página
+  asset:        Asset
+  assets:       Asset[]           // para el selector de máscara
+  keywords:     Keyword[]
+  layers:       Layer[]           // para el selector de capa objetivo de la regla de color
+  colorUnlocks: ColorUnlock[]     // reglas existentes, para encontrar la de este asset si ya tiene una
+  onClose:      () => void
+  onSaved:      () => void        // recarga la página
 }
 
-export default function AssetInspector({ asset, assets, keywords, onClose, onSaved }: Props) {
+const ROLE_OPTIONS = [
+  { value: 'skin',      label: 'Principal' },
+  { value: 'primary',   label: 'Secundario' },
+  { value: 'secondary', label: 'Detalle' },
+]
+
+export default function AssetInspector({ asset, assets, keywords, layers, colorUnlocks, onClose, onSaved }: Props) {
   const [keywordId,      setKeywordId]      = useState<string>(asset.keywordId ?? '')
   const [isDefault,      setIsDefault]      = useState(asset.isDefault)
   const [suggestedColor, setSuggestedColor] = useState<string>(asset.suggestedColor ?? '')
@@ -22,6 +30,15 @@ export default function AssetInspector({ asset, assets, keywords, onClose, onSav
     asset.transform ?? { scale: 1, offsetX: 0, offsetY: 0 }
   )
   const [saving, setSaving] = useState(false)
+
+  // Regla "al seleccionar este asset, desbloquea el color de otra capa"
+  // (ej. chaqueta abierta que libera el color de la camiseta debajo).
+  const existingRule = colorUnlocks.find(u => u.scopeAssetId === asset.id)
+  const [colorRuleOn,     setColorRuleOn]     = useState(!!existingRule)
+  const [ruleTargetLayer, setRuleTargetLayer] = useState(existingRule?.targetLayerKey ?? layers[0]?.layerKey ?? '')
+  const [ruleTargetRole,  setRuleTargetRole]  = useState(existingRule?.targetRole ?? 'skin')
+  const [ruleMode,        setRuleMode]        = useState<'wheel' | 'swatches'>(existingRule?.mode ?? 'wheel')
+  const [ruleSwatches,    setRuleSwatches]    = useState<string[]>(existingRule?.swatches ?? ['#ffffff', '#000000', '#ff0000'])
 
   function updateTransform(key: keyof AssetTransform, val: number) {
     setTransform(t => ({ ...t, [key]: val }))
@@ -51,6 +68,31 @@ export default function AssetInspector({ asset, assets, keywords, onClose, onSav
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
     })
+
+    // Regla de color propia del asset (chaqueta → libera color de camiseta, etc.)
+    if (colorRuleOn) {
+      const ruleBody = {
+        collection_id:    asset.collectionId,
+        scope_asset_id:   asset.id,
+        target_layer_key: ruleTargetLayer,
+        target_role:      ruleTargetRole,
+        mode:              ruleMode,
+        swatches:          ruleMode === 'swatches' ? ruleSwatches : null,
+      }
+      if (existingRule) {
+        await fetch('/api/color-unlocks', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: existingRule.id, ...ruleBody }),
+        })
+      } else {
+        await fetch('/api/color-unlocks', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ruleBody),
+        })
+      }
+    } else if (existingRule) {
+      await fetch(`/api/color-unlocks?id=${existingRule.id}`, { method: 'DELETE' })
+    }
 
     setSaving(false)
     onSaved()
@@ -172,6 +214,86 @@ export default function AssetInspector({ asset, assets, keywords, onClose, onSav
               </p>
             </div>
           )}
+
+          {/* Regla: al seleccionar este asset, libera el color de otra capa */}
+          <div>
+            <Toggle
+              label="Al elegirlo, desbloquea color en otra capa"
+              hint="Ej. una chaqueta abierta que deja ver la camiseta — al seleccionar la chaqueta, el usuario podrá recolorear la camiseta libremente"
+              value={colorRuleOn}
+              onChange={setColorRuleOn}
+            />
+            {colorRuleOn && (
+              <div className="mt-3 p-3 rounded-xl space-y-2" style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.15)' }}>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={ruleTargetLayer}
+                    onChange={e => setRuleTargetLayer(e.target.value)}
+                    className="flex-1 text-[10px] rounded-lg px-2 py-1.5 border focus:outline-none"
+                    style={inputS}
+                  >
+                    {layers.map(l => <option key={l.id} value={l.layerKey}>{l.labelEs}</option>)}
+                  </select>
+                  <select
+                    value={ruleTargetRole}
+                    onChange={e => setRuleTargetRole(e.target.value)}
+                    className="flex-1 text-[10px] rounded-lg px-2 py-1.5 border focus:outline-none"
+                    style={inputS}
+                  >
+                    {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {(['wheel', 'swatches'] as const).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setRuleMode(m)}
+                      className="text-[9px] font-semibold px-2.5 py-1 rounded-lg transition-all"
+                      style={{
+                        background: ruleMode === m ? 'rgba(124,58,237,0.6)' : 'rgba(255,255,255,0.05)',
+                        color: ruleMode === m ? 'white' : 'rgba(255,255,255,0.35)',
+                      }}
+                    >
+                      {m === 'wheel' ? '🎡 Rueda libre' : '🎨 Colores fijos'}
+                    </button>
+                  ))}
+                </div>
+                {ruleMode === 'swatches' && (
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {ruleSwatches.map((hex, i) => (
+                      <div key={i} className="relative">
+                        <input
+                          type="color"
+                          value={hex}
+                          onChange={e => setRuleSwatches(sw => sw.map((s, idx) => idx === i ? e.target.value : s))}
+                          className="w-7 h-7 rounded-lg cursor-pointer border-0"
+                        />
+                        {ruleSwatches.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setRuleSwatches(sw => sw.filter((_, idx) => idx !== i))}
+                            className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center"
+                            style={{ background: 'rgba(239,68,68,0.8)', color: 'white' }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setRuleSwatches(sw => [...sw, '#ffffff'])}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
+                      style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)' }}
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Allow builder-side transform (solo cabello frontal) */}
           {asset.layerKey === 'hair-front' && (

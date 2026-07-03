@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
-import type { Layer, Asset, Collection, AvatarState, Keyword, AssetTransform } from '@/types'
+import type { Layer, Asset, Collection, AvatarState, Keyword, AssetTransform, ColorUnlock } from '@/types'
 import AssetInspector from '@/components/admin/AssetInspector'
 import SmartBatchUploader from '@/components/admin/SmartBatchUploader'
 import LayerEditorPanel from '@/components/admin/LayerEditorPanel'
@@ -72,13 +72,14 @@ function buildDefaultState(collectionId: string, layers: Layer[], assets: Asset[
 }
 
 interface Props {
-  collections: Collection[]
-  layers:      Layer[]
-  assets:      Asset[]
-  keywords:    Keyword[]
+  collections:  Collection[]
+  layers:       Layer[]
+  assets:       Asset[]
+  keywords:     Keyword[]
+  colorUnlocks: ColorUnlock[]
 }
 
-export default function Studio({ collections, layers: initialLayers, assets, keywords }: Props) {
+export default function Studio({ collections, layers: initialLayers, assets, keywords, colorUnlocks }: Props) {
   const firstCollId = collections[0]?.id ?? ''
   const [collectionId, setCollectionId] = useState(firstCollId)
   const [layers, setLayers] = useState(initialLayers)
@@ -1228,6 +1229,8 @@ export default function Studio({ collections, layers: initialLayers, assets, key
           asset={inspecting}
           assets={assets}
           keywords={keywords}
+          layers={collLayers}
+          colorUnlocks={colorUnlocks}
           onClose={() => setInspecting(null)}
           onSaved={() => { setInspecting(null); window.location.reload() }}
         />

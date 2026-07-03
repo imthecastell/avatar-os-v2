@@ -136,10 +136,24 @@ export class AvatarCompositor {
     return [bitmap.width * fit, bitmap.height * fit]
   }
 
+  // Resuelve qué hex aplica a una región del colorMap de un asset en esta capa.
+  // 'skin' respeta el sistema histórico de layer.colorToken (piel/cabello,
+  // siempre activo) además del nuevo desbloqueo genérico; el resto de roles
+  // (primary/secondary/…) solo se recolorea vía tokens de desbloqueo
+  // 'unlock:{layerKey}:{role}', escritos por el builder cuando una regla de
+  // color_unlocks está activa.
+  private resolveRoleColor(layer: Layer, role: string, tokens: AvatarState['tokens']): string | null {
+    const unlockKey = `unlock:${layer.layerKey}:${role}`
+    if (tokens[unlockKey]) return tokens[unlockKey]
+    if (role === 'skin' && layer.colorToken && tokens[layer.colorToken]) return tokens[layer.colorToken]
+    return null
+  }
+
   // ── Get or build a cached ImageBitmap for any asset (LRU acotado) ─────
   private async getBitmap(asset: Asset, layer: Layer, tokens: AvatarState['tokens']): Promise<ImageBitmap> {
-    const tokenValue = layer.colorToken ? tokens[layer.colorToken] : null
-    const cacheKey   = `${asset.id}::${tokenValue ?? ''}`
+    const roles      = asset.colorMap?.length ? asset.colorMap.map(c => c.role) : ['skin']
+    const tokenParts = roles.map(r => this.resolveRoleColor(layer, r, tokens) ?? '').join(',')
+    const cacheKey   = `${asset.id}::${tokenParts}`
 
     const cached = this.renderCache.get(cacheKey)
     if (cached) {
@@ -177,14 +191,10 @@ export class AvatarCompositor {
       this.svgCache.set(asset.cdnUrl, svgText)
     }
 
-    if (layer.colorToken && tokens[layer.colorToken]) {
-      // Always recolor the dominant color (role 'skin' = most frequent non-black/white).
-      // Hair SVGs: dominant = hair color. Head/body SVGs: dominant = skin color.
-      const colorMap = asset.colorMap?.length ? asset.colorMap : detectEditableColors(svgText)
-      const originalColor = colorMap.find((c: { role: string }) => c.role === 'skin')
-      if (originalColor) {
-        svgText = this.recolorSVG(svgText, (originalColor as { original: string }).original, tokens[layer.colorToken])
-      }
+    const colorMap = asset.colorMap?.length ? asset.colorMap : detectEditableColors(svgText)
+    for (const entry of colorMap) {
+      const hex = this.resolveRoleColor(layer, entry.role, tokens)
+      if (hex) svgText = this.recolorSVG(svgText, entry.original, hex)
     }
 
     const blob = new Blob([svgText], { type: 'image/svg+xml' })

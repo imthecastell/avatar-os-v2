@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react'
 import Image from 'next/image'
-import type { AvatarState, Layer, Asset, AssetTransform, LayerException, LayerDefault, Collection, SiteSettings } from '@/types'
+import type { AvatarState, Layer, Asset, AssetTransform, LayerException, LayerDefault, Collection, SiteSettings, ColorUnlock } from '@/types'
 import { pickThumb } from '@/lib/thumb'
 import { makeT, LOCALE_META, type Locale } from '@/lib/i18n/dict'
 import ExportModal from '@/components/builder/ExportModal'
@@ -88,8 +88,6 @@ const HAIR_COLORS = [
   '#E91E8C', '#7C3AED', '#0EA5E9', '#10B981',
 ]
 
-// Capas que admiten color extra cuando XTRA está activo
-const EXTRA_COLOR_LAYERS = new Set(['shirt', 'acc-front', 'mask'])
 
 // ── Ruta guiada (solo la primera visita) ──────────────────
 // Cada paso muestra el panel de una o más capas; los pasos cuyas capas
@@ -142,6 +140,33 @@ function getHiddenLayers(state: AvatarState, exceptions: LayerException[]): Set<
   return hidden
 }
 
+// Un asset con keywordId requiere esa keyword desbloqueada, o cualquier
+// keyword master (la palabra clave universal que libera todo).
+function isAssetUnlocked(asset: Asset, state: AvatarState, masterKeywordIds: string[]): boolean {
+  if (!asset.keywordId) return true
+  if (state.unlockedKeywords.includes(asset.keywordId)) return true
+  return state.unlockedKeywords.some(id => masterKeywordIds.includes(id))
+}
+
+// Reglas de color_unlocks activas para una capa: la keyword requerida está
+// desbloqueada (o el usuario tiene alguna keyword master) Y, si la regla
+// exige un asset específico seleccionado (ej. una chaqueta abierta),
+// ese asset es el que está activo en su propia capa.
+function getActiveColorUnlocks(
+  colorUnlocks: ColorUnlock[], state: AvatarState, masterKeywordIds: string[], assets: Asset[], layerKey: string
+): ColorUnlock[] {
+  const hasMaster = state.unlockedKeywords.some(id => masterKeywordIds.includes(id))
+  return colorUnlocks.filter(u => {
+    if (u.targetLayerKey !== layerKey) return false
+    if (u.keywordId && !hasMaster && !state.unlockedKeywords.includes(u.keywordId)) return false
+    if (u.scopeAssetId) {
+      const scopeAsset = assets.find(a => a.id === u.scopeAssetId)
+      if (!scopeAsset || state.selectedAssets[scopeAsset.layerKey] !== u.scopeAssetId) return false
+    }
+    return true
+  })
+}
+
 // ── Component ─────────────────────────────────────────────
 interface Props {
   locale: string
@@ -151,9 +176,11 @@ interface Props {
   exceptions: LayerException[]
   defaults: LayerDefault[]
   settings?: SiteSettings | null
+  colorUnlocks?: ColorUnlock[]
+  masterKeywordIds?: string[]
 }
 
-export default function BuilderClient({ locale: initialLocale, collection, layers, assets, exceptions, defaults, settings }: Props) {
+export default function BuilderClient({ locale: initialLocale, collection, layers, assets, exceptions, defaults, settings, colorUnlocks = [], masterKeywordIds = [] }: Props) {
   const [locale, setLocale]       = useState(initialLocale)
   const [state, setState]         = useState<AvatarState>(() => buildInitialState(collection, layers, assets, defaults))
   const [exportUrl, setExportUrl] = useState<string | null>(null)
@@ -230,14 +257,6 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
 
   const t = makeT(locale)
 
-  // Assets visibles para una capa (públicos + los de keywords desbloqueadas)
-  function visibleAssets(layerKey: string) {
-    return assets.filter(a =>
-      a.layerKey === layerKey &&
-      (!a.keywordId || state.unlockedKeywords.includes(a.keywordId))
-    )
-  }
-
   // ── State mutations ───────────────────────────────────
   function setToken(key: string, hex: string) {
     setState(s => ({ ...s, tokens: { ...s.tokens, [key]: hex } }))
@@ -298,11 +317,10 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     setShareUrl(`${window.location.origin}/${locale}/builder?s=${encoded}`)
   }
 
-  function unlockKeyword(keywordId: string, isXtra: boolean) {
+  function unlockKeyword(keywordId: string) {
     setState(s => ({
       ...s,
       unlockedKeywords: s.unlockedKeywords.includes(keywordId) ? s.unlockedKeywords : [...s.unlockedKeywords, keywordId],
-      extraColor: s.extraColor || isXtra,
     }))
     setBurstId(b => b + 1)
   }
@@ -337,7 +355,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
         assets={assets}
         settings={settings ?? null}
         onEnter={unlock => {
-          if (unlock) unlockKeyword(unlock.keywordId, unlock.isXtra)
+          if (unlock) unlockKeyword(unlock.keywordId)
           setShowWelcome(false)
         }}
       />
@@ -466,6 +484,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                         onExtraColorChange={(key, hex) => setToken(key, hex)}
                         hairTransform={hairTransform}
                         onHairTransform={(id, tr) => setHairTransform(p => ({ ...p, [id]: tr }))}
+                        colorUnlocks={colorUnlocks}
+                        masterKeywordIds={masterKeywordIds}
                         locale={locale}
                       />
                     </div>
@@ -546,6 +566,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
               onExtraColorChange={(key, hex) => setToken(key, hex)}
               hairTransform={hairTransform}
               onHairTransform={(id, tr) => setHairTransform(p => ({ ...p, [id]: tr }))}
+              colorUnlocks={colorUnlocks}
+              masterKeywordIds={masterKeywordIds}
               locale={locale}
             />
           </div>
@@ -611,18 +633,17 @@ interface LayerPanelProps {
   onExtraColorChange:  (key: string, hex: string) => void
   hairTransform:       Record<string, AssetTransform>
   onHairTransform:     (assetId: string, transform: AssetTransform) => void
+  colorUnlocks:        ColorUnlock[]
+  masterKeywordIds:    string[]
   locale:              string
 }
 
-function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelectHair, onSkinChange, onHairColorChange, onExtraColorChange, hairTransform, onHairTransform, locale }: LayerPanelProps) {
+function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelectHair, onSkinChange, onHairColorChange, onExtraColorChange, hairTransform, onHairTransform, colorUnlocks, masterKeywordIds, locale }: LayerPanelProps) {
   const t = makeT(locale)
   const layer = layers.find(l => l.layerKey === categoryKey)
 
   // Assets visibles (públicos + keyword desbloqueadas)
-  const layerAssets = assets.filter(a =>
-    a.layerKey === categoryKey &&
-    (!a.keywordId || state.unlockedKeywords.includes(a.keywordId))
-  )
+  const layerAssets = assets.filter(a => a.layerKey === categoryKey && isAssetUnlocked(a, state, masterKeywordIds))
 
   const selectedId = state.selectedAssets[categoryKey] ?? null
 
@@ -674,10 +695,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
 
   // ── CABELLO: frente + color + trasero en un solo panel ──
   if (categoryKey === 'hair-back') {
-    const hairFrontAssets = assets.filter(a =>
-      a.layerKey === 'hair-front' &&
-      (!a.keywordId || state.unlockedKeywords.includes(a.keywordId))
-    )
+    const hairFrontAssets = assets.filter(a => a.layerKey === 'hair-front' && isAssetUnlocked(a, state, masterKeywordIds))
     const hairFrontId = state.selectedAssets['hair-front'] ?? null
 
     function handleHairFront(assetId: string | null) {
@@ -774,9 +792,9 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
     )
   }
 
-  // ── CAPAS CON EDICIÓN EXTRA (XTRA keyword) ────────────
-  if (state.extraColor && EXTRA_COLOR_LAYERS.has(categoryKey)) {
-    const colorKey = `${categoryKey}-color`
+  // ── CAPAS CON COLOR DESBLOQUEABLE (color_unlocks) ─────
+  const activeUnlocks = getActiveColorUnlocks(colorUnlocks, state, masterKeywordIds, assets, categoryKey)
+  if (activeUnlocks.length > 0) {
     return (
       <div className="space-y-5">
         <AssetGrid
@@ -786,21 +804,46 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
           onSelect={id => onSelectAsset(categoryKey, id)}
           locale={locale}
         />
-        <div>
-          <Divider label={t('color')} />
-          <div className="flex items-center gap-3 mt-3">
-            <input
-              type="color"
-              value={state.tokens[colorKey] ?? '#ffffff'}
-              onChange={e => onExtraColorChange(colorKey, e.target.value)}
-              className="w-9 h-9 rounded-xl cursor-pointer border-0 bg-transparent"
-            />
-            <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-              {t('customizeColor')}
-            </p>
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full ml-auto" style={{ background: 'rgba(124,58,237,0.3)', color: '#c4b5fd' }}>XTRA</span>
-          </div>
-        </div>
+        {activeUnlocks.map(unlock => {
+          const tokenKey = `unlock:${unlock.targetLayerKey}:${unlock.targetRole}`
+          return (
+            <div key={unlock.id}>
+              <Divider label={t('color')} />
+              {unlock.mode === 'swatches' ? (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {(unlock.swatches ?? []).map(hex => {
+                    const active = state.tokens[tokenKey] === hex
+                    return (
+                      <button
+                        key={hex}
+                        onClick={() => onExtraColorChange(tokenKey, hex)}
+                        className="w-8 h-8 rounded-full transition-all fx-tap shrink-0"
+                        style={{
+                          background: hex,
+                          outline: active ? '2.5px solid #a78bfa' : '1px solid rgba(255,255,255,0.1)',
+                          outlineOffset: active ? 2 : 0,
+                          transform: active ? 'scale(1.15)' : undefined,
+                        }}
+                      />
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 mt-3">
+                  <input
+                    type="color"
+                    value={state.tokens[tokenKey] ?? '#ffffff'}
+                    onChange={e => onExtraColorChange(tokenKey, e.target.value)}
+                    className="w-9 h-9 rounded-xl cursor-pointer border-0 bg-transparent"
+                  />
+                  <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    {t('customizeColor')}
+                  </p>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     )
   }
@@ -891,7 +934,7 @@ function AssetGrid({ assets, selectedId, optional, onSelect, locale }: {
 interface KeywordSectionProps {
   collectionId: string
   state:        AvatarState
-  onUnlock:     (id: string, isXtra: boolean) => void
+  onUnlock:     (id: string) => void
   locale:       string
 }
 
@@ -909,10 +952,8 @@ function KeywordSection({ collectionId, state, onUnlock, locale }: KeywordSectio
     const res  = await fetch(`/api/keywords?keyword=${encodeURIComponent(value.trim().toUpperCase())}&collectionId=${collectionId}`)
     const data = await res.json()
     if (data.valid) {
-      const isXtra = (data.keyword.label as string).toLowerCase().includes('xtra') ||
-                     (data.keyword.keyword as string).toLowerCase().includes('xtra')
       setLabel(data.keyword.label)
-      onUnlock(data.keyword.id, isXtra)
+      onUnlock(data.keyword.id)
       setStatus('ok')
       setValue('')
       setTimeout(() => { setOpen(false); setStatus('idle') }, 1200)
@@ -927,11 +968,6 @@ function KeywordSection({ collectionId, state, onUnlock, locale }: KeywordSectio
       {/* Unlocked keyword badges */}
       {state.unlockedKeywords.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-3">
-          {state.extraColor && (
-            <span className="text-[9px] font-semibold px-2 py-1 rounded-full" style={{ background: 'rgba(124,58,237,0.3)', color: '#c4b5fd' }}>
-              ✦ XTRA
-            </span>
-          )}
           <span className="text-[9px] px-2 py-1 rounded-full" style={{ background: 'rgba(16,185,129,0.2)', color: '#6ee7b7' }}>
             🔓 {state.unlockedKeywords.length} {t('keysUnlocked')}
           </span>

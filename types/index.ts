@@ -102,6 +102,17 @@ export interface Keyword {
   isMaster:     boolean
 }
 
+export interface ColorUnlock {
+  id:              string
+  collectionId:    string
+  keywordId:       string | null   // requiere esta keyword desbloqueada (o cualquier master)
+  scopeAssetId:    string | null   // solo aplica si este asset está seleccionado en su capa
+  targetLayerKey:  string          // capa cuyo color se vuelve editable
+  targetRole:      string          // región del colorMap (skin/primary/secondary…)
+  mode:            'wheel' | 'swatches'
+  swatches:        string[] | null
+}
+
 export interface SiteSettings {
   welcomeMessageEs:   string | null
   welcomeMessageEn:   string | null
