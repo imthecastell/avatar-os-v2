@@ -63,11 +63,17 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
       // desde la vista de assets. Aquí solo guardamos.
     }
 
-    await fetch('/api/assets', {
+    const assetRes = await fetch('/api/assets', {
       method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
     })
+    if (!assetRes.ok) {
+      const d = await assetRes.json().catch(() => ({} as { error?: string }))
+      alert(`No se pudo guardar el asset: ${d.error ?? `HTTP ${assetRes.status}`}`)
+      setSaving(false)
+      return
+    }
 
     // Regla de color propia del asset (chaqueta → libera color de camiseta, etc.)
     if (colorRuleOn) {
@@ -79,16 +85,20 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
         mode:              ruleMode,
         swatches:          ruleMode === 'swatches' ? ruleSwatches : null,
       }
-      if (existingRule) {
-        await fetch('/api/color-unlocks', {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: existingRule.id, ...ruleBody }),
-        })
-      } else {
-        await fetch('/api/color-unlocks', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(ruleBody),
-        })
+      const ruleRes = existingRule
+        ? await fetch('/api/color-unlocks', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: existingRule.id, ...ruleBody }),
+          })
+        : await fetch('/api/color-unlocks', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(ruleBody),
+          })
+      if (!ruleRes.ok) {
+        const d = await ruleRes.json().catch(() => ({} as { error?: string }))
+        alert(`El asset se guardó, pero la regla de color falló: ${d.error ?? `HTTP ${ruleRes.status}`}\n\n¿Se aplicó la migración 010_color_unlocks.sql en Supabase?`)
+        setSaving(false)
+        return
       }
     } else if (existingRule) {
       await fetch(`/api/color-unlocks?id=${existingRule.id}`, { method: 'DELETE' })

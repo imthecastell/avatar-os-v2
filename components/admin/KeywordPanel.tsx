@@ -90,12 +90,14 @@ export default function KeywordPanel({ collections, keywords: initial, layers, c
       }),
     })
     const data = await res.json()
-    if (!data.error) {
-      setColorUnlocks(prev => [...prev, {
-        id: data.id, collectionId: data.collection_id, keywordId: data.keyword_id, scopeAssetId: data.scope_asset_id,
-        targetLayerKey: data.target_layer_key, targetRole: data.target_role, mode: data.mode, swatches: data.swatches,
-      }])
+    if (!res.ok || data.error) {
+      alert(`No se pudo crear la regla: ${data.error ?? `HTTP ${res.status}`}\n\n¿Se aplicó la migración 010_color_unlocks.sql en Supabase?`)
+      return
     }
+    setColorUnlocks(prev => [...prev, {
+      id: data.id, collectionId: data.collection_id, keywordId: data.keyword_id, scopeAssetId: data.scope_asset_id,
+      targetLayerKey: data.target_layer_key, targetRole: data.target_role, mode: data.mode, swatches: data.swatches,
+    }])
   }
 
   async function updateRule(id: string, patch: Record<string, unknown>) {
@@ -106,11 +108,15 @@ export default function KeywordPanel({ collections, keywords: initial, layers, c
       ...(patch.mode !== undefined ? { mode: patch.mode as 'wheel' | 'swatches' } : {}),
       ...(patch.swatches !== undefined ? { swatches: patch.swatches as string[] } : {}),
     } : u))
-    await fetch('/api/color-unlocks', {
+    const res = await fetch('/api/color-unlocks', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...patch }),
     })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({} as { error?: string }))
+      alert(`No se pudo guardar el cambio: ${d.error ?? `HTTP ${res.status}`}`)
+    }
   }
 
   async function deleteRule(id: string) {

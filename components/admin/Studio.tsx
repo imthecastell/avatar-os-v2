@@ -100,13 +100,15 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set())
   const [transformOverrides, setTransformOverrides] = useState<Record<string, AssetTransform>>({})
   const [openMenuId, setOpenMenuId]               = useState<string | null>(null)
+  const [replacingAssetId, setReplacingAssetId]   = useState<string | null>(null)
   const [layerEditMode, setLayerEditMode]         = useState(false)
   const [showPublish, setShowPublish]             = useState(false)
   const [publishing, setPublishing]               = useState(false)
   const [savingWelcomeAvatar, setSavingWelcomeAvatar] = useState(false)
   const [welcomeAvatarSaved, setWelcomeAvatarSaved]   = useState(false)
 
-  const fileRef       = useRef<HTMLInputElement>(null)
+  const fileRef        = useRef<HTMLInputElement>(null)
+  const replaceFileRef = useRef<HTMLInputElement>(null)
   const layerListRef  = useRef<HTMLDivElement>(null)
   const dragFromRef   = useRef<number | null>(null)
   const dragOverRef   = useRef<number | null>(null)
@@ -358,6 +360,21 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   async function deleteAsset(assetId: string) {
     if (!confirm('¿Eliminar este asset?')) return
     await fetch(`/api/assets?id=${assetId}`, { method: 'DELETE' })
+    window.location.reload()
+  }
+
+  async function replaceAssetFile(assetId: string, file: File) {
+    setUploading(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('assetId', assetId)
+    const res = await fetch('/api/assets/replace', { method: 'POST', body: fd })
+    setUploading(false)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({} as { error?: string }))
+      alert(`No se pudo reemplazar: ${d.error ?? `HTTP ${res.status}`}`)
+      return
+    }
     window.location.reload()
   }
 
@@ -986,6 +1003,14 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                           Default
                         </button>
                         <button
+                          onClick={e => { e.stopPropagation(); setOpenMenuId(null); setReplacingAssetId(asset.id); replaceFileRef.current?.click() }}
+                          className="text-[9px] font-medium rounded-lg py-1 text-white"
+                          style={{ background: 'rgba(255,255,255,0.15)' }}
+                          title="Sube un archivo nuevo conservando keyword, default, ajustes de transform y reglas de color de este asset"
+                        >
+                          🔁 Reemplazar
+                        </button>
+                        <button
                           onClick={e => { e.stopPropagation(); setOpenMenuId(null); deleteAsset(asset.id) }}
                           className="text-[9px] font-medium rounded-lg py-1"
                           style={{ background: 'rgba(127,29,29,0.8)', color: 'rgba(252,165,165,1)' }}
@@ -1220,6 +1245,20 @@ export default function Studio({ collections, layers: initialLayers, assets, key
         </div>
         </>)}
       </aside>
+
+      {/* Input oculto para "🔁 Reemplazar" — dispara replaceAssetFile con el asset elegido en el menú */}
+      <input
+        ref={replaceFileRef}
+        type="file"
+        accept=".svg,.png,.jpg,.jpeg"
+        className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0]
+          if (file && replacingAssetId) replaceAssetFile(replacingAssetId, file)
+          setReplacingAssetId(null)
+          e.target.value = ''
+        }}
+      />
 
       {/* ══════════════════════════════════════════════════
           Asset Inspector modal
