@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { uploadBinary } from '@/lib/storage-upload'
 import sharp from 'sharp'
+import { Resvg } from '@resvg/resvg-js'
 
 const SIZE_THRESHOLD = 300 * 1024 // real vector SVGs in this project are all well under this
+
+async function makeThumb(png: Buffer): Promise<Buffer> {
+  return sharp(png).resize(320, 320, { fit: 'inside', withoutEnlargement: true }).png({ compressionLevel: 9, quality: 80 }).toBuffer()
+}
 
 /**
  * One-time/repeatable cleanup: some SVGs were exported from Affinity as a
@@ -79,6 +84,127 @@ export async function POST(request: NextRequest) {
       }
     }
     return NextResponse.json({ repaired: repaired.length, results: repaired })
+  }
+
+  // rerender=1: emotion/frame/effect-final tenían más contenido que solo un
+  // raster embebido (clips con forma real, strokes decorativos, múltiples
+  // imágenes superpuestas) — la extracción base64 los descartó. Se
+  // re-renderiza el SVG original completo con resvg (soporta archivos
+  // grandes que sharp/librsvg rechaza) para preservar todo el contenido.
+  const rerender = new URL(request.url).searchParams.get('rerender') === '1'
+  if (rerender) {
+    const { data: targets } = await supabase
+      .from('assets')
+      .select('id, layer_key, name, storage_path, cdn_url')
+      .in('layer_key', ['emotion', 'frame', 'effect-final'])
+      .eq('file_type', 'png')
+
+    const rerendered: { label: string; ok: boolean; detail: string }[] = []
+    for (const asset of targets ?? []) {
+      const label = `${asset.layer_key}/${asset.name}`
+      try {
+        const svgUrl = asset.cdn_url.replace(/\.png$/i, '.svg')
+        const svgRes = await fetch(svgUrl)
+        if (!svgRes.ok) { rerendered.push({ label, ok: false, detail: `svg original no encontrado (${svgUrl})` }); continue }
+        const svgBuf = Buffer.from(await svgRes.arrayBuffer())
+
+        const png = new Resvg(svgBuf, { fitTo: { mode: 'width', value: 2048 } }).render().asPng()
+
+        const upResult = await uploadBinary(asset.storage_path, png, 'image/png')
+        if ('error' in upResult) { rerendered.push({ label, ok: false, detail: `upload: ${upResult.error}` }); continue }
+
+        const thumb = await makeThumb(png)
+        const thumbResult = await uploadBinary(`thumbs/${asset.storage_path}`, thumb, 'image/png')
+
+        await supabase.from('assets').update({
+          original_size: png.length,
+          thumb_url: 'publicUrl' in thumbResult ? thumbResult.publicUrl : null,
+        }).eq('id', asset.id)
+
+        rerendered.push({ label, ok: true, detail: `re-renderizado, ${(png.length / 1024).toFixed(0)}KB` })
+      } catch (err) {
+        rerendered.push({ label, ok: false, detail: err instanceof Error ? err.message : String(err) })
+      }
+    }
+    return NextResponse.json({ rerendered: rerendered.length, results: rerendered })
+  }
+
+  // flowers=1: cada Arch*.svg trae DOS imágenes superpuestas (el arco y una
+  // decoración floral) más 2 trazos vectoriales — la extracción solo tomó
+  // la primera imagen (el arco, que se conserva tal cual). Esto crea una
+  // capa nueva "flower" con las flores extraídas por separado, ocultando el
+  // grupo del arco y re-renderizando solo el resto con resvg.
+  const flowers = new URL(request.url).searchParams.get('flowers') === '1'
+  if (flowers) {
+    const { data: archAssets } = await supabase
+      .from('assets')
+      .select('id, collection_id, layer_key, name, filename, storage_path, cdn_url')
+      .eq('layer_key', 'arch')
+
+    const created: { label: string; ok: boolean; detail: string }[] = []
+    const ensuredLayers = new Set<string>()
+
+    for (const asset of archAssets ?? []) {
+      const label = `flower/${asset.name}`
+      try {
+        if (asset.collection_id && !ensuredLayers.has(asset.collection_id)) {
+          const { data: existingLayer } = await supabase
+            .from('layers').select('id').eq('collection_id', asset.collection_id).eq('layer_key', 'flower').maybeSingle()
+          if (!existingLayer) {
+            const { data: archLayer } = await supabase
+              .from('layers').select('order_index').eq('collection_id', asset.collection_id).eq('layer_key', 'arch').maybeSingle()
+            await supabase.from('layers').insert({
+              collection_id: asset.collection_id,
+              layer_key: 'flower',
+              label_es: 'Flores', label_en: 'Flowers',
+              type: 'svg', blend_mode: 'source-over', color_token: null,
+              optional: true, locked: false, visible_in_builder: true,
+              order_index: (archLayer?.order_index ?? 7) + 1,
+              opacity: 1,
+            })
+          }
+          ensuredLayers.add(asset.collection_id)
+        }
+
+        const svgUrl = asset.cdn_url.replace(/\.png$/i, '.svg')
+        const svgRes = await fetch(svgUrl)
+        if (!svgRes.ok) { created.push({ label, ok: false, detail: `svg original no encontrado (${svgUrl})` }); continue }
+        let svgText = await svgRes.text()
+        if (!svgText.includes('id="Archs"')) { created.push({ label, ok: false, detail: 'estructura distinta — sin grupo "Archs"' }); continue }
+        svgText = svgText.replace('<g id="Archs"', '<g id="Archs" display="none"')
+
+        const png = new Resvg(Buffer.from(svgText), { fitTo: { mode: 'width', value: 2048 } }).render().asPng()
+
+        const flowerName = asset.name.replace(/Arch/i, 'Flower')
+        const flowerPath = asset.storage_path.replace('/arch/', '/flower/').replace(/Arch/i, 'Flower')
+
+        const upResult = await uploadBinary(flowerPath, png, 'image/png')
+        if ('error' in upResult) { created.push({ label, ok: false, detail: `upload: ${upResult.error}` }); continue }
+
+        const thumb = await makeThumb(png)
+        const thumbResult = await uploadBinary(`thumbs/${flowerPath}`, thumb, 'image/png')
+
+        const { error: insErr } = await supabase.from('assets').insert({
+          collection_id: asset.collection_id,
+          layer_key: 'flower',
+          name: flowerName,
+          filename: `${flowerName}.png`,
+          storage_path: flowerPath,
+          cdn_url: upResult.publicUrl,
+          thumb_url: 'publicUrl' in thumbResult ? thumbResult.publicUrl : null,
+          file_type: 'png',
+          original_size: png.length,
+          color_map: [],
+          svg_editable: false,
+        })
+        if (insErr) { created.push({ label, ok: false, detail: `db: ${insErr.message}` }); continue }
+
+        created.push({ label, ok: true, detail: `creado, ${(png.length / 1024).toFixed(0)}KB` })
+      } catch (err) {
+        created.push({ label, ok: false, detail: err instanceof Error ? err.message : String(err) })
+      }
+    }
+    return NextResponse.json({ created: created.length, results: created })
   }
 
   const { data: assets, error } = await supabase

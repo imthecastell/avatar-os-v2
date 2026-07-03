@@ -64,6 +64,7 @@ const LAYER_META: Record<string, { emoji: string; es: string; en: string; nl: st
   'effect-final': { emoji: '✨', es: 'Efecto',     en: 'Effect',     nl: 'Effect',      fr: 'Effet' },
   'frame':        { emoji: '🖼️', es: 'Marco',     en: 'Frame',      nl: 'Kader',       fr: 'Cadre' },
   'arch':         { emoji: '🏛️', es: 'Arco',      en: 'Arch',       nl: 'Boog',        fr: 'Arche' },
+  'flower':       { emoji: '🌸', es: 'Flores',    en: 'Flowers',    nl: 'Bloemen',     fr: 'Fleurs' },
   'window':       { emoji: '🪟', es: 'Ventana',    en: 'Window',     nl: 'Venster',     fr: 'Fenêtre' },
 }
 

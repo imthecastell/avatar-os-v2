@@ -6,7 +6,7 @@ import type { AvatarCompositor } from '@/lib/engine/compositor'
 import type { AvatarState, Layer, Asset } from '@/types'
 
 // Capas de escenario — NO levitan. Todo lo demás es el personaje y flota junto.
-const STATIC_KEYS = new Set(['background', 'frame', 'arch', 'window', 'effect-final'])
+const STATIC_KEYS = new Set(['background', 'frame', 'arch', 'flower', 'window', 'effect-final'])
 
 // blendMode de canvas → valor válido de CSS mix-blend-mode
 function cssBlend(mode: string): React.CSSProperties['mixBlendMode'] {
