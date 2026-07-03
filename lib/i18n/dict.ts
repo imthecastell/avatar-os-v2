@@ -32,6 +32,13 @@ export const DICT = {
   unlockExperience:   { es: 'Desbloquear experiencia',                   en: 'Unlock experience',             nl: 'Ervaring ontgrendelen',             fr: "Débloquer l'expérience" },
   followUs:           { es: 'Síguenos',                                  en: 'Follow us',                     nl: 'Volg ons',                          fr: 'Suivez-nous' },
   wrongCode:          { es: 'Código incorrecto',                        en: 'Incorrect code',                nl: 'Onjuiste code',                     fr: 'Code incorrect' },
+
+  // Ajuste de cabello (solo assets con allowTransform)
+  adjustFit:          { es: 'Ajustar a tu cabeza',                       en: 'Adjust to your head',           nl: 'Aanpassen aan je hoofd',            fr: 'Ajuster à ta tête' },
+  scale:              { es: 'Escala',                                   en: 'Scale',                          nl: 'Schaal',                            fr: 'Échelle' },
+  positionX:          { es: 'Posición horizontal',                      en: 'Horizontal position',            nl: 'Horizontale positie',               fr: 'Position horizontale' },
+  positionY:          { es: 'Posición vertical',                        en: 'Vertical position',              nl: 'Verticale positie',                 fr: 'Position verticale' },
+  resetAdjustment:    { es: 'Restablecer',                              en: 'Reset',                          nl: 'Resetten',                          fr: 'Réinitialiser' },
 } as const
 
 export type DictKey = keyof typeof DICT

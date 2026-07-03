@@ -48,6 +48,7 @@ export interface Asset {
   transform:      AssetTransform
   suggestedColor: string | null   // color hex sugerido al activar (ej. color del cabello)
   maskAssetId:    string | null   // asset de máscara a auto-aplicar cuando este está activo
+  allowTransform: boolean         // permite al usuario ajustar escala/posición en el builder público (solo cabello frontal)
 }
 
 export interface ColorEntry {

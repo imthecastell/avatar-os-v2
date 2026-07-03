@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import Image from 'next/image'
-import type { AvatarState, Layer, Asset, LayerException, LayerDefault, Collection, SiteSettings } from '@/types'
+import type { AvatarState, Layer, Asset, AssetTransform, LayerException, LayerDefault, Collection, SiteSettings } from '@/types'
 import { pickThumb } from '@/lib/thumb'
 import { makeT, LOCALE_META, type Locale } from '@/lib/i18n/dict'
 import ExportModal from '@/components/builder/ExportModal'
@@ -168,6 +168,16 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
 
   // Ruta guiada — null = modo libre; se activa solo si nunca se completó
   const [wizardStep, setWizardStep] = useState<number | null>(null)
+
+  // Ajuste de escala/posición por usuario — solo para cabello frontal con
+  // allowTransform=true (algunas formas de cabeza necesitan un pequeño
+  // ajuste). Es un override de sesión, no se guarda en el servidor.
+  const [hairTransform, setHairTransform] = useState<Record<string, AssetTransform>>({})
+
+  const canvasAssets = useMemo(
+    () => assets.map(a => hairTransform[a.id] ? { ...a, transform: hairTransform[a.id] } : a),
+    [assets, hairTransform]
+  )
 
   useEffect(() => {
     if (!localStorage.getItem(WIZARD_DONE_KEY)) setWizardStep(0)
@@ -386,7 +396,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                   ref={stageRef}
                   state={state}
                   layers={layers.filter(l => !hiddenLayers.has(l.layerKey))}
-                  assets={assets}
+                  assets={canvasAssets}
                 />
               </div>
               {burstId > 0 && <ConfettiBurst key={burstId} />}
@@ -454,6 +464,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                         onSkinChange={hex => setToken('skin-color', hex)}
                         onHairColorChange={hex => setToken('hair-color', hex)}
                         onExtraColorChange={(key, hex) => setToken(key, hex)}
+                        hairTransform={hairTransform}
+                        onHairTransform={(id, tr) => setHairTransform(p => ({ ...p, [id]: tr }))}
                         locale={locale}
                       />
                     </div>
@@ -532,6 +544,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
               onSkinChange={hex => setToken('skin-color', hex)}
               onHairColorChange={hex => setToken('hair-color', hex)}
               onExtraColorChange={(key, hex) => setToken(key, hex)}
+              hairTransform={hairTransform}
+              onHairTransform={(id, tr) => setHairTransform(p => ({ ...p, [id]: tr }))}
               locale={locale}
             />
           </div>
@@ -595,10 +609,12 @@ interface LayerPanelProps {
   onSkinChange:        (hex: string) => void
   onHairColorChange:   (hex: string) => void
   onExtraColorChange:  (key: string, hex: string) => void
+  hairTransform:       Record<string, AssetTransform>
+  onHairTransform:     (assetId: string, transform: AssetTransform) => void
   locale:              string
 }
 
-function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelectHair, onSkinChange, onHairColorChange, onExtraColorChange, locale }: LayerPanelProps) {
+function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelectHair, onSkinChange, onHairColorChange, onExtraColorChange, hairTransform, onHairTransform, locale }: LayerPanelProps) {
   const t = makeT(locale)
   const layer = layers.find(l => l.layerKey === categoryKey)
 
@@ -695,6 +711,14 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
             onSelect={handleHairFront}
             locale={locale}
           />
+          {hairFrontId && hairFrontAssets.find(a => a.id === hairFrontId)?.allowTransform && (
+            <HairFitControls
+              asset={hairFrontAssets.find(a => a.id === hairFrontId)!}
+              value={hairTransform[hairFrontId] ?? hairFrontAssets.find(a => a.id === hairFrontId)!.transform}
+              onChange={tr => onHairTransform(hairFrontId, tr)}
+              locale={locale}
+            />
+          )}
         </div>
 
         {/* COLOR */}
@@ -995,6 +1019,61 @@ function LocaleSwitcher({ locale, onChange }: { locale: string; onChange: (l: st
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════
+// HairFitControls — escala/posición para cabello frontal
+// que el admin marcó como allowTransform (algunas cabezas lo necesitan)
+// ══════════════════════════════════════════════════════════
+function HairFitControls({ asset, value, onChange, locale }: {
+  asset:    Asset
+  value:    AssetTransform
+  onChange: (t: AssetTransform) => void
+  locale:   string
+}) {
+  const t = makeT(locale)
+  const isDefault = value.scale === 1 && value.offsetX === 0 && value.offsetY === 0
+
+  function set(key: keyof AssetTransform, v: number) {
+    onChange({ ...value, [key]: v })
+  }
+
+  return (
+    <div className="mt-3 p-3 rounded-2xl space-y-2.5 fx-fade-in" style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.2)' }}>
+      <div className="flex items-center justify-between">
+        <p className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: '#a78bfa' }}>
+          ✦ {t('adjustFit')}
+        </p>
+        {!isDefault && (
+          <button onClick={() => onChange({ scale: 1, offsetX: 0, offsetY: 0 })} className="text-[9px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            ↩ {t('resetAdjustment')}
+          </button>
+        )}
+      </div>
+      <FitSlider label={`${t('scale')}  ${value.scale.toFixed(2)}×`} min={0.5} max={1.8} step={0.01} value={value.scale} onChange={v => set('scale', v)} />
+      <FitSlider label={`${t('positionX')}  ${value.offsetX > 0 ? '+' : ''}${value.offsetX}px`} min={-200} max={200} step={4} value={value.offsetX} onChange={v => set('offsetX', v)} />
+      <FitSlider label={`${t('positionY')}  ${value.offsetY > 0 ? '+' : ''}${value.offsetY}px`} min={-200} max={200} step={4} value={value.offsetY} onChange={v => set('offsetY', v)} />
+    </div>
+  )
+}
+
+function FitSlider({ label, min, max, step, value, onChange }: {
+  label: string; min: number; max: number; step: number; value: number; onChange: (v: number) => void
+}) {
+  const pct = ((value - min) / (max - min)) * 100
+  return (
+    <div>
+      <p className="text-[9px] mb-1" style={{ color: 'rgba(255,255,255,0.45)' }}>{label}</p>
+      <input
+        type="range"
+        min={min} max={max} step={step}
+        value={value}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        className="w-full h-1 rounded-full appearance-none cursor-pointer"
+        style={{ accentColor: '#a78bfa', background: `linear-gradient(to right, #a78bfa ${pct}%, rgba(255,255,255,0.1) 0%)` }}
+      />
     </div>
   )
 }

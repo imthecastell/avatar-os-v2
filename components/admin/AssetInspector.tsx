@@ -17,6 +17,7 @@ export default function AssetInspector({ asset, assets, keywords, onClose, onSav
   const [isDefault,      setIsDefault]      = useState(asset.isDefault)
   const [suggestedColor, setSuggestedColor] = useState<string>(asset.suggestedColor ?? '')
   const [maskAssetId,    setMaskAssetId]    = useState<string>(asset.maskAssetId ?? '')
+  const [allowTransform, setAllowTransform] = useState(asset.allowTransform)
   const [transform,      setTransform]      = useState<AssetTransform>(
     asset.transform ?? { scale: 1, offsetX: 0, offsetY: 0 }
   )
@@ -35,6 +36,7 @@ export default function AssetInspector({ asset, assets, keywords, onClose, onSav
       is_default:     isDefault,
       suggested_color: suggestedColor || null,
       mask_asset_id:  maskAssetId  || null,
+      allow_transform: allowTransform,
       transform,
     }
 
@@ -169,6 +171,16 @@ export default function AssetInspector({ asset, assets, keywords, onClose, onSav
                 La máscara usa modo "destination-out" sobre las capas anteriores para borrar el cabello que asoma bajo la gorra.
               </p>
             </div>
+          )}
+
+          {/* Allow builder-side transform (solo cabello frontal) */}
+          {asset.layerKey === 'hair-front' && (
+            <Toggle
+              label="Permitir ajuste en el builder"
+              hint="Muestra escala/posición al usuario público cuando elige este cabello — útil si no encaja bien con ciertas formas de cabeza"
+              value={allowTransform}
+              onChange={setAllowTransform}
+            />
           )}
 
           {/* Transform */}

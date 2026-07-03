@@ -20,6 +20,7 @@ export function mapAsset(r: Record<string, unknown>): Asset {
     transform:      (r.transform as { scale: number; offsetX: number; offsetY: number }) ?? { scale: 1, offsetX: 0, offsetY: 0 },
     suggestedColor: r.suggested_color as string | null,
     maskAssetId:    r.mask_asset_id as string | null,
+    allowTransform: (r.allow_transform as boolean) ?? false,
   }
 }
 
