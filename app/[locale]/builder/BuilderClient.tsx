@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import type { AvatarState, Layer, Asset, AssetTransform, LayerException, LayerDefault, Collection, SiteSettings, ColorUnlock } from '@/types'
 import { pickThumb } from '@/lib/thumb'
@@ -1021,23 +1022,36 @@ function KeywordSection({ collectionId, state, onUnlock, locale }: KeywordSectio
 // ══════════════════════════════════════════════════════════
 function LocaleSwitcher({ locale, onChange }: { locale: string; onChange: (l: string) => void }) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos]   = useState({ top: 0, right: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
   const current = LOCALE_META[locale as Locale] ?? LOCALE_META.es
+
+  function toggle() {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      setPos({ top: r.bottom + 4, right: window.innerWidth - r.right })
+    }
+    setOpen(v => !v)
+  }
 
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen(v => !v)}
+        ref={btnRef}
+        onClick={toggle}
         className="text-xs px-2 py-1 rounded-lg fx-tap flex items-center gap-1"
         style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
       >
         {current.flag}
       </button>
-      {open && (
+      {/* Portal directo a <body> — evita quedar atrapado detrás del canvas del
+          avatar o cualquier otro ancestro con su propio stacking context. */}
+      {open && typeof document !== 'undefined' && createPortal(
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-[999]" onClick={() => setOpen(false)} />
           <div
-            className="absolute right-0 top-full mt-1 rounded-xl overflow-hidden z-50 fx-fade-in"
-            style={{ background: '#161624', border: '1px solid rgba(255,255,255,0.08)', minWidth: 130 }}
+            className="fixed rounded-xl overflow-hidden z-[1000] fx-fade-in"
+            style={{ top: pos.top, right: pos.right, background: '#161624', border: '1px solid rgba(255,255,255,0.08)', minWidth: 130 }}
           >
             {(Object.keys(LOCALE_META) as Locale[]).map(l => (
               <button
@@ -1053,7 +1067,8 @@ function LocaleSwitcher({ locale, onChange }: { locale: string; onChange: (l: st
               </button>
             ))}
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   )

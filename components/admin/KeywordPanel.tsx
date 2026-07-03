@@ -1,13 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import type { Keyword, Collection, Layer, ColorUnlock } from '@/types'
+import type { Keyword, Collection, Layer, ColorUnlock, Asset } from '@/types'
 
 interface Props {
   collections:  Collection[]
   keywords:     Keyword[]
   layers:       Layer[]
   colorUnlocks: ColorUnlock[]
+  assets:       Asset[]
+}
+
+// Una capa solo se puede recolorear si al menos uno de sus assets es SVG con
+// regiones detectadas (colorMap) — capas raster (fondo, marco) nunca podrán
+// aplicar un color_unlock por más que se configure una regla sobre ellas.
+function isRecolorable(layerKey: string, assets: Asset[]): boolean {
+  return assets.some(a => a.layerKey === layerKey && a.fileType === 'svg' && a.colorMap.length > 0)
 }
 
 const inputC = 'w-full text-xs rounded-xl px-3 py-2.5 border focus:outline-none transition-colors focus:border-violet-500'
@@ -19,7 +27,7 @@ const ROLE_OPTIONS = [
   { value: 'secondary', label: 'Detalle' },
 ]
 
-export default function KeywordPanel({ collections, keywords: initial, layers, colorUnlocks: initialUnlocks }: Props) {
+export default function KeywordPanel({ collections, keywords: initial, layers, colorUnlocks: initialUnlocks, assets }: Props) {
   const [keywords, setKeywords]       = useState(initial)
   const [colorUnlocks, setColorUnlocks] = useState(initialUnlocks)
   const [collectionId, setCollId]     = useState(collections[0]?.id ?? '')
@@ -76,7 +84,11 @@ export default function KeywordPanel({ collections, keywords: initial, layers, c
   }
 
   async function addRule(kw: Keyword) {
-    const layer = layers.find(l => l.collectionId === kw.collectionId)
+    const layer = layers.find(l => l.collectionId === kw.collectionId && isRecolorable(l.layerKey, assets))
+    if (!layer) {
+      alert('Esta colección no tiene ninguna capa recoloreable (necesita al menos un asset SVG con colores detectados).')
+      return
+    }
     const res = await fetch('/api/color-unlocks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -190,7 +202,7 @@ export default function KeywordPanel({ collections, keywords: initial, layers, c
             {keywords.map(kw => {
               const rules = colorUnlocks.filter(u => u.keywordId === kw.id)
               const rulesOpen = rulesOpenFor === kw.id
-              const kwLayers = layers.filter(l => l.collectionId === kw.collectionId)
+              const kwLayers = layers.filter(l => l.collectionId === kw.collectionId && isRecolorable(l.layerKey, assets))
               return (
                 <div key={kw.id}>
                   <div className="flex items-center gap-4 px-5 py-3">

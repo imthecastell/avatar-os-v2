@@ -20,6 +20,13 @@ const ROLE_OPTIONS = [
   { value: 'secondary', label: 'Detalle' },
 ]
 
+// Una capa solo se puede recolorear si al menos uno de sus assets es SVG con
+// regiones detectadas (colorMap) — capas raster (fondo, marco) nunca podrán
+// aplicar un color_unlock por más que se configure una regla sobre ellas.
+function isRecolorable(layerKey: string, allAssets: Asset[]): boolean {
+  return allAssets.some(a => a.layerKey === layerKey && a.fileType === 'svg' && a.colorMap.length > 0)
+}
+
 export default function AssetInspector({ asset, assets, keywords, layers, colorUnlocks, onClose, onSaved }: Props) {
   const [keywordId,      setKeywordId]      = useState<string>(asset.keywordId ?? '')
   const [isDefault,      setIsDefault]      = useState(asset.isDefault)
@@ -33,9 +40,11 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
 
   // Regla "al seleccionar este asset, desbloquea el color de otra capa"
   // (ej. chaqueta abierta que libera el color de la camiseta debajo).
+  // Solo capas con al menos un SVG con colores detectados pueden recolorearse.
+  const recolorableLayers = layers.filter(l => isRecolorable(l.layerKey, assets))
   const existingRule = colorUnlocks.find(u => u.scopeAssetId === asset.id)
   const [colorRuleOn,     setColorRuleOn]     = useState(!!existingRule)
-  const [ruleTargetLayer, setRuleTargetLayer] = useState(existingRule?.targetLayerKey ?? layers[0]?.layerKey ?? '')
+  const [ruleTargetLayer, setRuleTargetLayer] = useState(existingRule?.targetLayerKey ?? recolorableLayers[0]?.layerKey ?? '')
   const [ruleTargetRole,  setRuleTargetRole]  = useState(existingRule?.targetRole ?? 'skin')
   const [ruleMode,        setRuleMode]        = useState<'wheel' | 'swatches'>(existingRule?.mode ?? 'wheel')
   const [ruleSwatches,    setRuleSwatches]    = useState<string[]>(existingRule?.swatches ?? ['#ffffff', '#000000', '#ff0000'])
@@ -242,7 +251,7 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
                     className="flex-1 text-[10px] rounded-lg px-2 py-1.5 border focus:outline-none"
                     style={inputS}
                   >
-                    {layers.map(l => <option key={l.id} value={l.layerKey}>{l.labelEs}</option>)}
+                    {recolorableLayers.map(l => <option key={l.id} value={l.layerKey}>{l.labelEs}</option>)}
                   </select>
                   <select
                     value={ruleTargetRole}
