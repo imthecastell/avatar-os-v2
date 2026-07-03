@@ -1,0 +1,61 @@
+{
+  "builder": {
+    "title": "Maak je Avatar",
+    "sections": {
+      "scene": "Scène",
+      "avatar": "Avatar",
+      "extras": "Extra's",
+      "mask": "Masker"
+    },
+    "controls": {
+      "skin": "Huidskleur",
+      "hair": "Haar",
+      "shirt": "Shirt",
+      "accessory": "Accessoire",
+      "none": "Geen"
+    },
+    "actions": {
+      "randomize": "Verras me",
+      "export": "Maak mijn PFP",
+      "keyword": "Ik heb een geheime code"
+    },
+    "export": {
+      "title": "Je Avatar is Klaar",
+      "message": "Elk stukje is uniek, net als jij.",
+      "download": "Download PNG",
+      "share": "Delen"
+    },
+    "keyword": {
+      "placeholder": "Voer je code in...",
+      "submit": "Ontgrendelen",
+      "success": "Inhoud ontgrendeld!",
+      "error": "Onjuiste code"
+    },
+    "loading": "Laden..."
+  },
+  "admin": {
+    "nav": {
+      "assets": "Assets",
+      "layers": "Lagen",
+      "preview": "Voorbeeld",
+      "keywords": "Sleutelwoorden"
+    },
+    "login": {
+      "title": "Admin — Avatar OS",
+      "email": "E-mail",
+      "password": "Wachtwoord",
+      "submit": "Inloggen",
+      "error": "Ongeldige gegevens"
+    },
+    "upload": {
+      "title": "Assets uploaden",
+      "dropzone": "Sleep bestanden hierheen of klik om te selecteren",
+      "detected": "Gedetecteerde laag",
+      "undetected": "Geen categorie — handmatig toewijzen",
+      "processing": "Verwerken...",
+      "success": "Asset geüpload",
+      "assign_layer": "Laag toewijzen"
+    },
+    "logout": "Uitloggen"
+  }
+}

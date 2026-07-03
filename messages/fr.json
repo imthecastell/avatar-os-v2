@@ -1,0 +1,61 @@
+{
+  "builder": {
+    "title": "Crée ton Avatar",
+    "sections": {
+      "scene": "Scène",
+      "avatar": "Avatar",
+      "extras": "Extras",
+      "mask": "Masque"
+    },
+    "controls": {
+      "skin": "Teint de peau",
+      "hair": "Cheveux",
+      "shirt": "T-shirt",
+      "accessory": "Accessoire",
+      "none": "Aucun"
+    },
+    "actions": {
+      "randomize": "Surprends-moi",
+      "export": "Créer mon PFP",
+      "keyword": "J'ai un code secret"
+    },
+    "export": {
+      "title": "Ton Avatar est prêt",
+      "message": "Chaque pièce est unique, comme toi.",
+      "download": "Télécharger le PNG",
+      "share": "Partager"
+    },
+    "keyword": {
+      "placeholder": "Entre ton code...",
+      "submit": "Déverrouiller",
+      "success": "Contenu déverrouillé !",
+      "error": "Code incorrect"
+    },
+    "loading": "Chargement..."
+  },
+  "admin": {
+    "nav": {
+      "assets": "Assets",
+      "layers": "Calques",
+      "preview": "Aperçu",
+      "keywords": "Mots-clés"
+    },
+    "login": {
+      "title": "Admin — Avatar OS",
+      "email": "E-mail",
+      "password": "Mot de passe",
+      "submit": "Se connecter",
+      "error": "Identifiants invalides"
+    },
+    "upload": {
+      "title": "Importer des assets",
+      "dropzone": "Glisse des fichiers ici ou clique pour sélectionner",
+      "detected": "Calque détecté",
+      "undetected": "Aucune catégorie — assigner manuellement",
+      "processing": "Traitement...",
+      "success": "Asset importé",
+      "assign_layer": "Assigner le calque"
+    },
+    "logout": "Déconnexion"
+  }
+}
