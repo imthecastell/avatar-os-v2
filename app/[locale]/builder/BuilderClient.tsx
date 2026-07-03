@@ -489,7 +489,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
 
           {/* Tab bar — horizontally scrollable */}
           <div className="shrink-0 border-b overflow-x-auto" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-            <div className="flex gap-0.5 p-1.5 min-w-max">
+            <div className="flex gap-1 px-3 py-2 min-w-max">
               {visibleLayers.map(layer => {
                 if (hiddenLayers.has(layer.layerKey)) return null
                 const m        = LAYER_META[layer.layerKey]
@@ -499,17 +499,18 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                   <button
                     key={layer.layerKey}
                     onClick={() => setActiveCat(layer.layerKey)}
-                    className="relative flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all shrink-0 fx-tap lg:px-2.5 lg:py-2"
+                    className="relative flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all shrink-0 fx-tap lg:px-2.5 lg:py-2"
                     style={{
-                      background: isActive ? 'rgba(124,58,237,0.2)' : 'transparent',
-                      outline: isActive ? '1px solid rgba(124,58,237,0.4)' : 'none',
+                      background: isActive ? 'linear-gradient(135deg, rgba(124,58,237,0.35), rgba(168,85,247,0.18))' : 'transparent',
+                      boxShadow: isActive ? '0 2px 12px rgba(124,58,237,0.25), inset 0 1px 0 rgba(255,255,255,0.08)' : 'none',
+                      outline: isActive ? '1px solid rgba(167,139,250,0.35)' : '1px solid transparent',
                     }}
                   >
                     {hasSelection && (
-                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full" style={{ background: isActive ? '#a78bfa' : 'rgba(167,139,250,0.5)' }} />
+                      <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full" style={{ background: isActive ? '#c4b5fd' : 'rgba(167,139,250,0.5)' }} />
                     )}
-                    <span className="text-sm leading-none lg:text-base">{m?.emoji ?? '📁'}</span>
-                    <span className="text-[8px] font-medium whitespace-nowrap lg:text-[9px]" style={{ color: isActive ? '#a78bfa' : 'rgba(255,255,255,0.35)' }}>
+                    <span className="text-base leading-none lg:text-base">{m?.emoji ?? '📁'}</span>
+                    <span className="text-[8px] font-medium whitespace-nowrap lg:text-[9px]" style={{ color: isActive ? '#e9d5ff' : 'rgba(255,255,255,0.4)' }}>
                       {m ? pickLang(m, locale) : layer.labelEs}
                     </span>
                   </button>

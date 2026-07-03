@@ -29,6 +29,58 @@ export async function POST(request: NextRequest) {
 
   const supabase = createAdminClient()
 
+  // repair=1: algunos PNG convertidos en una corrida previa (antes del fix de
+  // uploadBinary) quedaron corruptos. Se reconstruyen desde el .svg original,
+  // que nunca se borró de storage — solo cambió a qué apunta cdn_url en la fila.
+  const repair = new URL(request.url).searchParams.get('repair') === '1'
+  if (repair) {
+    const { data: pngAssets } = await supabase
+      .from('assets')
+      .select('id, layer_key, name, filename, storage_path, cdn_url')
+      .eq('file_type', 'png')
+
+    const repaired: { label: string; ok: boolean; detail: string }[] = []
+    for (const asset of pngAssets ?? []) {
+      const label = `${asset.layer_key}/${asset.name}`
+      try {
+        const check = await fetch(asset.cdn_url)
+        const checkBuf = Buffer.from(await check.arrayBuffer())
+        await sharp(checkBuf).metadata() // throws si está corrupto
+        continue // válido, no toca reparar
+      } catch {
+        // corrupto — reconstruir desde el .svg original
+      }
+      try {
+        const svgUrl = asset.cdn_url.replace(/\.png$/i, '.svg')
+        const svgRes  = await fetch(svgUrl)
+        if (!svgRes.ok) { repaired.push({ label, ok: false, detail: `svg original no encontrado (${svgUrl})` }); continue }
+        const svgText = await svgRes.text()
+        const m = svgText.match(/data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)"/)
+        if (!m) { repaired.push({ label, ok: false, detail: 'svg original sin base64 embebido' }); continue }
+
+        const raster = Buffer.from(m[2], 'base64')
+        const png = await sharp(raster).resize(2048, 2048, { fit: 'inside', withoutEnlargement: true }).png({ compressionLevel: 9, quality: 90 }).toBuffer()
+        const upResult = await uploadBinary(asset.storage_path, png, 'image/png')
+        if ('error' in upResult) { repaired.push({ label, ok: false, detail: `upload: ${upResult.error}` }); continue }
+
+        const thumb = await sharp(png).resize(320, 320, { fit: 'inside' }).png({ compressionLevel: 9, quality: 80 }).toBuffer()
+        const thumbPath = `thumbs/${asset.storage_path}`
+        const thumbResult = await uploadBinary(thumbPath, thumb, 'image/png')
+
+        await supabase.from('assets').update({
+          cdn_url: upResult.publicUrl,
+          thumb_url: 'publicUrl' in thumbResult ? thumbResult.publicUrl : null,
+          original_size: png.length,
+        }).eq('id', asset.id)
+
+        repaired.push({ label, ok: true, detail: `reparado, ${(png.length / 1024).toFixed(0)}KB` })
+      } catch (err) {
+        repaired.push({ label, ok: false, detail: err instanceof Error ? err.message : String(err) })
+      }
+    }
+    return NextResponse.json({ repaired: repaired.length, results: repaired })
+  }
+
   const { data: assets, error } = await supabase
     .from('assets')
     .select('id, layer_key, name, filename, storage_path, cdn_url, original_size')
