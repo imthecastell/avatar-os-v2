@@ -831,10 +831,12 @@ function AssetGrid({ assets, selectedId, optional, onSelect, locale }: {
             onClick={() => onSelect(asset.id)}
             className="relative aspect-square rounded-2xl overflow-hidden transition-all fx-item-in fx-tap"
             style={{
-              border: `2px solid ${isActive ? '#7c3aed' : 'rgba(255,255,255,0.07)'}`,
-              background: 'rgba(255,255,255,0.03)',
+              border: `2px solid ${isActive ? '#a78bfa' : 'rgba(255,255,255,0.08)'}`,
+              background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015))',
               transform: isActive ? 'scale(1.06)' : undefined,
-              boxShadow: isActive ? '0 0 20px rgba(124,58,237,0.5)' : undefined,
+              boxShadow: isActive
+                ? '0 0 24px rgba(124,58,237,0.55), inset 0 1px 0 rgba(255,255,255,0.15)'
+                : 'inset 0 1px 0 rgba(255,255,255,0.05)',
               animationDelay: `${Math.min(i * 30, 360)}ms`,
             }}
           >
