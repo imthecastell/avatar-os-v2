@@ -7,7 +7,7 @@ import type { Layer, Asset, Collection, AvatarState, Keyword, AssetTransform } f
 import AssetInspector from '@/components/admin/AssetInspector'
 import SmartBatchUploader from '@/components/admin/SmartBatchUploader'
 import LayerEditorPanel from '@/components/admin/LayerEditorPanel'
-import { thumbUrl } from '@/lib/thumb'
+import { pickThumb } from '@/lib/thumb'
 
 const AvatarCanvas = dynamic(() => import('@/components/builder/AvatarCanvas'), { ssr: false })
 
@@ -102,6 +102,8 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   const [layerEditMode, setLayerEditMode]         = useState(false)
   const [showPublish, setShowPublish]             = useState(false)
   const [publishing, setPublishing]               = useState(false)
+  const [savingWelcomeAvatar, setSavingWelcomeAvatar] = useState(false)
+  const [welcomeAvatarSaved, setWelcomeAvatarSaved]   = useState(false)
 
   const fileRef       = useRef<HTMLInputElement>(null)
   const layerListRef  = useRef<HTMLDivElement>(null)
@@ -235,6 +237,18 @@ export default function Studio({ collections, layers: initialLayers, assets, key
   async function updateVisibility(layerId: string, visible: boolean) {
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, visibleInBuilder: visible } : l))
     await putLayer(layerId, { visible_in_builder: visible })
+  }
+
+  async function saveAsWelcomeAvatar() {
+    setSavingWelcomeAvatar(true)
+    setWelcomeAvatarSaved(false)
+    const res = await fetch('/api/settings', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creator_avatar_state: avatarState, creator_collection_id: collectionId }),
+    })
+    setSavingWelcomeAvatar(false)
+    if (res.ok) { setWelcomeAvatarSaved(true); setTimeout(() => setWelcomeAvatarSaved(false), 2500) }
+    else { const d = await res.json().catch(() => ({} as { error?: string })); alert(`No se pudo guardar: ${d.error ?? `HTTP ${res.status}`}\n\n¿Se aplicó la migración 008_site_settings.sql en Supabase?`) }
   }
 
   // ── Avatar mutations ──────────────────────────────────
@@ -889,7 +903,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                     >
                       {asset.cdnUrl ? (
                         <Image
-                          src={thumbUrl(asset.cdnUrl, asset.fileType)}
+                          src={pickThumb(asset)}
                           alt={asset.name}
                           width={160} height={160}
                           className="w-full h-full object-cover"
@@ -1086,6 +1100,14 @@ export default function Studio({ collections, layers: initialLayers, assets, key
                 size={1024}
               />
             </div>
+            <button
+              onClick={saveAsWelcomeAvatar}
+              disabled={savingWelcomeAvatar}
+              className="w-full mt-2 text-[10px] font-semibold py-1.5 rounded-lg transition-all disabled:opacity-50"
+              style={{ background: welcomeAvatarSaved ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.05)', color: welcomeAvatarSaved ? '#6ee7b7' : 'rgba(255,255,255,0.4)' }}
+            >
+              {savingWelcomeAvatar ? 'Guardando…' : welcomeAvatarSaved ? '✓ Guardado como avatar de bienvenida' : '📸 Usar como avatar de bienvenida'}
+            </button>
           </div>
 
           {/* Controls */}

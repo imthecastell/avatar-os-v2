@@ -1,10 +1,13 @@
 /**
- * Returns a Supabase image-transform URL for raster assets (PNG/JPG).
- * SVGs are returned as-is (Supabase can't resize them).
+ * Resolves the best available thumbnail URL for an asset.
+ *
+ * Supabase's image-transform endpoint (`/storage/v1/render/image/...`) is
+ * disabled on this project's plan (403 FeatureNotEnabled) — for both SVG
+ * and raster inputs. Real thumbnails are generated server-side at upload
+ * time (see `lib/thumbnail-gen.ts`) and stored in `asset.thumbUrl`.
+ * This just picks that pre-generated thumb, falling back to the full
+ * asset for anything uploaded before thumbnails existed.
  */
-export function thumbUrl(cdnUrl: string, fileType: string, size = 160): string {
-  if (!cdnUrl || fileType === 'svg') return cdnUrl
-  return cdnUrl
-    .replace('/storage/v1/object/public/', '/storage/v1/render/image/public/')
-    + `?width=${size}&height=${size}&resize=contain&quality=80`
+export function pickThumb(asset: { cdnUrl: string; thumbUrl?: string | null }): string {
+  return asset.thumbUrl || asset.cdnUrl
 }

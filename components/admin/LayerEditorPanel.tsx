@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import type { Asset, Keyword } from '@/types'
-import { thumbUrl } from '@/lib/thumb'
+import { pickThumb } from '@/lib/thumb'
 
 interface Props {
   layerId:      string
@@ -158,7 +158,7 @@ export default function LayerEditorPanel({
                 {asset.cdnUrl && (
                   <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0" style={{ background: 'rgba(255,255,255,0.05)' }}>
                     <Image
-                      src={thumbUrl(asset.cdnUrl, asset.fileType, 64)}
+                      src={pickThumb(asset)}
                       alt={asset.name}
                       width={32} height={32}
                       className="w-full h-full object-cover"

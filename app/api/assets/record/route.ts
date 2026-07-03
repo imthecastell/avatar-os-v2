@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { makeThumbnail } from '@/lib/thumbnail-gen'
+
+const BUCKET = 'avatar-os-assets'
 
 // Records an asset in the DB after the browser has uploaded it directly to Supabase Storage.
 export async function POST(request: NextRequest) {
@@ -11,6 +14,27 @@ export async function POST(request: NextRequest) {
     fileType, originalSize, colorMap, svgEditable,
   } = body
 
+  // Raster thumbnail for grid previews — Supabase's image-transform endpoint
+  // is disabled on this project's plan, so we pre-render one ourselves by
+  // fetching the file we just uploaded and downsizing it.
+  let thumbUrl: string | null = null
+  if (fileType === 'png' || fileType === 'jpg') {
+    try {
+      const fileRes = await fetch(cdnUrl)
+      const buffer  = Buffer.from(await fileRes.arrayBuffer())
+      const thumbBuffer = await makeThumbnail(buffer)
+      const thumbPath = `thumbs/${String(storagePath).replace(/\.[^.]+$/, '.png')}`
+      const { error: thumbErr } = await supabase.storage
+        .from(BUCKET)
+        .upload(thumbPath, thumbBuffer, { contentType: 'image/png', upsert: true })
+      if (!thumbErr) {
+        thumbUrl = supabase.storage.from(BUCKET).getPublicUrl(thumbPath).data.publicUrl
+      }
+    } catch {
+      // Thumbnail is a nice-to-have; fall back to the full asset on failure
+    }
+  }
+
   const { data: asset, error } = await supabase
     .from('assets')
     .insert({
@@ -20,6 +44,7 @@ export async function POST(request: NextRequest) {
       filename,
       storage_path:  storagePath,
       cdn_url:       cdnUrl,
+      thumb_url:     thumbUrl,
       file_type:     fileType,
       original_size: originalSize ?? 0,
       color_map:     colorMap ?? [],

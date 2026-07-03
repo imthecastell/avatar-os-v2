@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { key: 'keywords',    label: 'Keywords',    href: 'keywords' },
   { key: 'exceptions',  label: 'Excepciones', href: 'exceptions' },
   { key: 'defaults',    label: 'Defaults',    href: 'defaults' },
+  { key: 'settings',    label: 'Bienvenida',  href: 'settings' },
 ]
 
 export default function AdminNav({ locale }: { locale: string }) {

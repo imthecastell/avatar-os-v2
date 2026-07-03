@@ -101,6 +101,20 @@ export interface Keyword {
   isMaster:     boolean
 }
 
+export interface SiteSettings {
+  welcomeMessageEs:   string | null
+  welcomeMessageEn:   string | null
+  welcomeMessageNl:   string | null
+  welcomeMessageFr:   string | null
+  creatorName:        string | null
+  socialInstagram:    string | null
+  socialTiktok:       string | null
+  socialTwitter:      string | null
+  socialWebsite:      string | null
+  creatorAvatarState: AvatarState | null
+  creatorCollectionId: string | null
+}
+
 export interface AvatarState {
   collectionId:     string
   tokens:           Record<string, string>   // skin-color, hair-color + extras desbloqueados

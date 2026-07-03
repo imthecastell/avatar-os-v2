@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
-import { mapCollection, mapLayer, mapAsset, mapLayerException, mapLayerDefault } from '@/lib/supabase/mappers'
+import { mapCollection, mapLayer, mapAsset, mapLayerException, mapLayerDefault, mapSiteSettings } from '@/lib/supabase/mappers'
+import type { SiteSettings } from '@/types'
 import BuilderClient from './BuilderClient'
 
 export default async function BuilderPage({
@@ -37,6 +38,15 @@ export default async function BuilderPage({
     defaults   = (defaultsRes.data || []).map(mapLayerDefault)
   }
 
+  // Tabla nueva — puede no existir aún si la migración 008 no se aplicó todavía
+  let settings: SiteSettings | null = null
+  try {
+    const { data: settingsRow } = await supabase.from('site_settings').select('*').eq('id', 1).maybeSingle()
+    if (settingsRow) settings = mapSiteSettings(settingsRow)
+  } catch {
+    settings = null
+  }
+
   return (
     <BuilderClient
       locale={locale}
@@ -45,6 +55,7 @@ export default async function BuilderPage({
       assets={assets}
       exceptions={exceptions}
       defaults={defaults}
+      settings={settings}
     />
   )
 }

@@ -2,11 +2,20 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
-import type { AvatarState, Layer, Asset, LayerException, LayerDefault, Collection } from '@/types'
+import type { AvatarState, Layer, Asset, LayerException, LayerDefault, Collection, SiteSettings } from '@/types'
+import { pickThumb } from '@/lib/thumb'
+import { makeT, LOCALE_META, type Locale } from '@/lib/i18n/dict'
 import ExportModal from '@/components/builder/ExportModal'
 import ConfettiBurst from '@/components/builder/ConfettiBurst'
 import AvatarStage, { type AvatarStageHandle } from '@/components/builder/AvatarStage'
+import WelcomeScreen from '@/components/builder/WelcomeScreen'
 import Link from 'next/link'
+
+// Elige el idioma más cercano dentro de un registro { es, en, nl, fr, ...resto }
+type LocalizedLabel = { es: string; en: string; nl: string; fr: string }
+function pickLang(obj: LocalizedLabel, locale: string): string {
+  return obj[locale as keyof LocalizedLabel] ?? obj.en
+}
 
 // ── Share URL helpers ─────────────────────────────────────
 function encodeState(state: AvatarState): string {
@@ -42,20 +51,20 @@ function decodeState(encoded: string): Partial<AvatarState> | null {
 const ALWAYS_HIDDEN = new Set(['hair-front'])
 
 // Emojis y labels por capa
-const LAYER_META: Record<string, { emoji: string; es: string; en: string }> = {
-  'background':   { emoji: '🌅', es: 'Fondo',      en: 'Background' },
-  'emotion':      { emoji: '😄', es: 'Expresión',  en: 'Expression' },
-  'hair-back':    { emoji: '💇', es: 'Cabello',    en: 'Hair' },
-  'head':         { emoji: '🧑', es: 'Cabeza',     en: 'Head' },
-  'body':         { emoji: '🫁', es: 'Cuerpo',     en: 'Body' },
-  'shirt':        { emoji: '👕', es: 'Ropa',       en: 'Outfit' },
-  'clothes':      { emoji: '🧥', es: 'Prendas',    en: 'Clothes' },
-  'acc-front':    { emoji: '🎩', es: 'Accesorio',  en: 'Accessory' },
-  'mask':         { emoji: '😷', es: 'Máscara',    en: 'Mask' },
-  'effect-final': { emoji: '✨', es: 'Efecto',     en: 'Effect' },
-  'frame':        { emoji: '🖼️', es: 'Marco',     en: 'Frame' },
-  'arch':         { emoji: '🏛️', es: 'Arco',      en: 'Arch' },
-  'window':       { emoji: '🪟', es: 'Ventana',    en: 'Window' },
+const LAYER_META: Record<string, { emoji: string; es: string; en: string; nl: string; fr: string }> = {
+  'background':   { emoji: '🌅', es: 'Fondo',      en: 'Background', nl: 'Achtergrond', fr: 'Fond' },
+  'emotion':      { emoji: '😄', es: 'Expresión',  en: 'Expression', nl: 'Uitdrukking', fr: 'Expression' },
+  'hair-back':    { emoji: '💇', es: 'Cabello',    en: 'Hair',       nl: 'Haar',        fr: 'Cheveux' },
+  'head':         { emoji: '🧑', es: 'Cabeza',     en: 'Head',       nl: 'Hoofd',       fr: 'Tête' },
+  'body':         { emoji: '🫁', es: 'Cuerpo',     en: 'Body',       nl: 'Lichaam',     fr: 'Corps' },
+  'shirt':        { emoji: '👕', es: 'Ropa',       en: 'Outfit',     nl: 'Outfit',      fr: 'Tenue' },
+  'clothes':      { emoji: '🧥', es: 'Prendas',    en: 'Clothes',    nl: 'Kleding',     fr: 'Vêtements' },
+  'acc-front':    { emoji: '🎩', es: 'Accesorio',  en: 'Accessory',  nl: 'Accessoire',  fr: 'Accessoire' },
+  'mask':         { emoji: '😷', es: 'Máscara',    en: 'Mask',       nl: 'Masker',      fr: 'Masque' },
+  'effect-final': { emoji: '✨', es: 'Efecto',     en: 'Effect',     nl: 'Effect',      fr: 'Effet' },
+  'frame':        { emoji: '🖼️', es: 'Marco',     en: 'Frame',      nl: 'Kader',       fr: 'Cadre' },
+  'arch':         { emoji: '🏛️', es: 'Arco',      en: 'Arch',       nl: 'Boog',        fr: 'Arche' },
+  'window':       { emoji: '🪟', es: 'Ventana',    en: 'Window',     nl: 'Venster',     fr: 'Fenêtre' },
 }
 
 // Tonos de piel: paleta oficial Twemoji (modificadores Fitzpatrick) + 3 fantasía
@@ -84,14 +93,14 @@ const EXTRA_COLOR_LAYERS = new Set(['shirt', 'acc-front', 'mask'])
 // ── Ruta guiada (solo la primera visita) ──────────────────
 // Cada paso muestra el panel de una o más capas; los pasos cuyas capas
 // no existen o no tienen assets en la colección se omiten solos.
-const WIZARD_FLOW: { keys: string[]; emoji: string; es: string; en: string }[] = [
-  { keys: ['background'],   emoji: '🌅', es: 'Elige tu fondo',              en: 'Pick your background' },
-  { keys: ['frame'],        emoji: '🖼️', es: 'Elige el marco',              en: 'Pick the frame' },
-  { keys: ['arch'],         emoji: '🏛️', es: 'Elige el arco',               en: 'Pick the arch' },
-  { keys: ['head', 'body'], emoji: '🧑', es: 'Forma del rostro y cuerpo',   en: 'Face shape & body' },
-  { keys: ['shirt'],        emoji: '👕', es: 'Elige la camiseta',           en: 'Pick the shirt' },
-  { keys: ['hair-back'],    emoji: '💇', es: 'Corte y color de cabello',    en: 'Hair style & color' },
-  { keys: ['mask'],         emoji: '😷', es: 'Máscara (opcional)',          en: 'Mask (optional)' },
+const WIZARD_FLOW: { keys: string[]; emoji: string; es: string; en: string; nl: string; fr: string }[] = [
+  { keys: ['background'],   emoji: '🌅', es: 'Elige tu fondo',              en: 'Pick your background',    nl: 'Kies je achtergrond',        fr: 'Choisis ton fond' },
+  { keys: ['frame'],        emoji: '🖼️', es: 'Elige el marco',              en: 'Pick the frame',          nl: 'Kies het kader',             fr: 'Choisis le cadre' },
+  { keys: ['arch'],         emoji: '🏛️', es: 'Elige el arco',               en: 'Pick the arch',           nl: 'Kies de boog',               fr: "Choisis l'arche" },
+  { keys: ['head', 'body'], emoji: '🧑', es: 'Forma del rostro y cuerpo',   en: 'Face shape & body',       nl: 'Gezichtsvorm & lichaam',     fr: 'Forme du visage et corps' },
+  { keys: ['shirt'],        emoji: '👕', es: 'Elige la camiseta',           en: 'Pick the shirt',          nl: 'Kies het shirt',             fr: 'Choisis le t-shirt' },
+  { keys: ['hair-back'],    emoji: '💇', es: 'Corte y color de cabello',    en: 'Hair style & color',      nl: 'Kapsel & haarkleur',         fr: 'Coupe et couleur de cheveux' },
+  { keys: ['mask'],         emoji: '😷', es: 'Máscara (opcional)',          en: 'Mask (optional)',         nl: 'Masker (optioneel)',         fr: 'Masque (facultatif)' },
 ]
 
 const WIZARD_DONE_KEY = 'avatarOS.wizardDone'
@@ -140,13 +149,15 @@ interface Props {
   assets: Asset[]
   exceptions: LayerException[]
   defaults: LayerDefault[]
+  settings?: SiteSettings | null
 }
 
-export default function BuilderClient({ locale: initialLocale, collection, layers, assets, exceptions, defaults }: Props) {
+export default function BuilderClient({ locale: initialLocale, collection, layers, assets, exceptions, defaults, settings }: Props) {
   const [locale, setLocale]       = useState(initialLocale)
   const [state, setState]         = useState<AvatarState>(() => buildInitialState(collection, layers, assets, defaults))
   const [exportUrl, setExportUrl] = useState<string | null>(null)
   const [shareUrl, setShareUrl]   = useState<string | null>(null)
+  const [showWelcome, setShowWelcome] = useState(true)
   const stageRef                  = useRef<AvatarStageHandle | null>(null)
 
   // FX — solo afectan la UI mientras se arma el avatar; el PNG exportado es estático
@@ -206,7 +217,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
 
   const hiddenLayers = getHiddenLayers(state, exceptions)
 
-  const t = (es: string, en: string) => locale === 'en' ? en : es
+  const t = makeT(locale)
 
   // Assets visibles para una capa (públicos + los de keywords desbloqueadas)
   function visibleAssets(layerKey: string) {
@@ -285,6 +296,13 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     setBurstId(b => b + 1)
   }
 
+  function startOver() {
+    if (!confirm(t('startOverConfirm'))) return
+    setState(buildInitialState(collection, layers, assets, defaults))
+    localStorage.removeItem(WIZARD_DONE_KEY)
+    setWizardStep(0)
+  }
+
 
   // ── Empty state ───────────────────────────────────────
   if (!collection) {
@@ -298,6 +316,23 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     )
   }
 
+  // ── Pantalla de bienvenida ─────────────────────────────
+  if (showWelcome) {
+    return (
+      <WelcomeScreen
+        locale={locale}
+        collection={collection}
+        layers={layers}
+        assets={assets}
+        settings={settings ?? null}
+        onEnter={unlock => {
+          if (unlock) unlockKeyword(unlock.keywordId, unlock.isXtra)
+          setShowWelcome(false)
+        }}
+      />
+    )
+  }
+
   // ── Render ────────────────────────────────────────────
   return (
     <div className="h-screen flex flex-col overflow-hidden select-none" style={{ background: '#07070e', color: 'white' }}>
@@ -308,20 +343,22 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
           <div className="w-6 h-6 rounded-lg flex items-center justify-center text-sm" style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)' }}>✦</div>
           <span className="text-sm font-semibold">Avatar OS</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setLocale(l => l === 'es' ? 'en' : 'es')}
-            className="text-xs px-2 py-1 rounded-lg"
+            onClick={startOver}
+            title={t('startOver')}
+            className="text-xs px-2.5 py-1 rounded-lg fx-tap flex items-center gap-1"
             style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}
           >
-            {locale === 'es' ? 'EN' : 'ES'}
+            ↺
           </button>
+          <LocaleSwitcher locale={locale} onChange={setLocale} />
           <button
             onClick={handleExport}
-            className="text-xs font-semibold px-4 py-1.5 rounded-xl"
+            className="text-xs font-semibold px-4 py-1.5 rounded-xl fx-tap"
             style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: 'white' }}
           >
-            ✨ {t('Crear PFP', 'Create PFP')}
+            ✨ {t('createPfp')}
           </button>
         </div>
       </header>
@@ -353,7 +390,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                 className="absolute bottom-2 left-2 text-[10px] font-medium px-2.5 py-1 rounded-xl backdrop-blur-md fx-tap lg:text-xs lg:px-3 lg:py-1.5 lg:bottom-3 lg:left-3"
                 style={{ background: 'rgba(0,0,0,0.55)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.1)' }}
               >
-                <span key={diceTick} className={diceTick > 0 ? 'fx-dice' : undefined}>🎲</span> {t('Aleatorio', 'Random')}
+                <span key={diceTick} className={diceTick > 0 ? 'fx-dice' : undefined}>🎲</span> {t('random')}
               </button>
             </div>
         </div>
@@ -369,10 +406,10 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
             <div className="shrink-0 px-4 pt-3 pb-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-[10px] font-semibold" style={{ color: '#a78bfa' }}>
-                  {t('Paso', 'Step')} {wizardStep + 1} {t('de', 'of')} {wizardSteps.length}
+                  {t('step')} {wizardStep + 1} {t('of')} {wizardSteps.length}
                 </p>
                 <button onClick={finishWizard} className="text-[10px] fx-tap" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                  {t('Saltar guía', 'Skip guide')} →
+                  {t('skipGuide')} →
                 </button>
               </div>
               <div className="flex gap-1">
@@ -381,7 +418,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                 ))}
               </div>
               <p className="text-sm font-semibold text-white mt-3">
-                {wizardSteps[wizardStep].emoji} {locale === 'en' ? wizardSteps[wizardStep].en : wizardSteps[wizardStep].es}
+                {wizardSteps[wizardStep].emoji} {pickLang(wizardSteps[wizardStep], locale)}
               </p>
             </div>
 
@@ -395,7 +432,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                     <div key={k}>
                       {wizardSteps[wizardStep].keys.length > 1 && stepLayer && (
                         <p className="text-[9px] font-semibold uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                          {locale === 'en' ? stepLayer.labelEn : stepLayer.labelEs}
+                          {pickLang(LAYER_META[stepLayer.layerKey] ?? { es: stepLayer.labelEs, en: stepLayer.labelEn, nl: stepLayer.labelEn, fr: stepLayer.labelEn }, locale)}
                         </p>
                       )}
                       <LayerPanel
@@ -436,8 +473,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                 }}
               >
                 {wizardStep === wizardSteps.length - 1
-                  ? `✨ ${t('¡Listo! Personalizar todo', 'Done! Customize everything')}`
-                  : `${t('Siguiente', 'Next')} →`}
+                  ? `✨ ${t('doneCustomize')}`
+                  : `${t('next')} →`}
               </button>
             </div>
           </>) : (<>
@@ -465,7 +502,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                     )}
                     <span className="text-sm leading-none lg:text-base">{m?.emoji ?? '📁'}</span>
                     <span className="text-[8px] font-medium whitespace-nowrap lg:text-[9px]" style={{ color: isActive ? '#a78bfa' : 'rgba(255,255,255,0.35)' }}>
-                      {locale === 'en' ? (m?.en ?? layer.labelEn) : (m?.es ?? layer.labelEs)}
+                      {m ? pickLang(m, locale) : layer.labelEs}
                     </span>
                   </button>
                 )
@@ -510,7 +547,14 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                 boxShadow: '0 4px 20px rgba(124,58,237,0.35)',
               }}
             >
-              ✨ {t('Crear mi PFP', 'Create my PFP')}
+              ✨ {t('createMyPfp')}
+            </button>
+            <button
+              onClick={startOver}
+              className="w-full text-xs font-medium py-2 mt-1 rounded-xl fx-tap flex items-center justify-center gap-1.5"
+              style={{ color: 'rgba(255,255,255,0.3)' }}
+            >
+              ↺ {t('startOver')}
             </button>
           </div>
           </>)}
@@ -545,7 +589,7 @@ interface LayerPanelProps {
 }
 
 function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelectHair, onSkinChange, onHairColorChange, onExtraColorChange, locale }: LayerPanelProps) {
-  const t = (es: string, en: string) => locale === 'en' ? en : es
+  const t = makeT(locale)
   const layer = layers.find(l => l.layerKey === categoryKey)
 
   // Assets visibles (públicos + keyword desbloqueadas)
@@ -565,10 +609,11 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
           selectedId={selectedId}
           optional={layer?.optional ?? false}
           onSelect={id => onSelectAsset('head', id)}
+          locale={locale}
         />
 
         <div>
-          <Divider label={t('Tono de piel', 'Skin tone')} />
+          <Divider label={t('skinTone')} />
           <div className="flex flex-wrap gap-2.5 mt-3">
             {SKIN_TONES.map(tone => {
               const active = state.tokens['skin-color'] === tone.hex
@@ -594,7 +639,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
             })}
           </div>
           <p className="text-[9px] mt-2" style={{ color: 'rgba(255,255,255,0.2)' }}>
-            {t('Bordes punteados = tonos de fantasía', 'Dashed border = fantasy tones')}
+            {t('fantasyHint')}
           </p>
         </div>
       </div>
@@ -631,19 +676,20 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
         {/* FRENTE */}
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            {t('Frente', 'Front')}
+            {t('front')}
           </p>
           <AssetGrid
             assets={hairFrontAssets}
             selectedId={hairFrontId}
             optional={true}
             onSelect={handleHairFront}
+            locale={locale}
           />
         </div>
 
         {/* COLOR */}
         <div>
-          <Divider label={t('Color', 'Color')} />
+          <Divider label={t('color')} />
           <div className="flex flex-wrap gap-2 mt-3">
             {HAIR_COLORS.map(hex => {
               const active = state.tokens['hair-color'] === hex
@@ -668,23 +714,24 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
               value={state.tokens['hair-color'] ?? '#3B2314'}
               onChange={e => onHairColorChange(e.target.value)}
               className="w-9 h-9 rounded-xl cursor-pointer border-0 bg-transparent"
-              title={t('Color personalizado', 'Custom color')}
+              title={t('customColor')}
             />
             <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-              {t('Color personalizado', 'Custom color')}
+              {t('customColor')}
             </p>
           </div>
         </div>
 
         {/* TRASERO */}
         <div>
-          <Divider label={t('Trasero', 'Back')} />
+          <Divider label={t('back')} />
           <div className="mt-3">
             <AssetGrid
               assets={layerAssets}
               selectedId={selectedId}
               optional={layer?.optional ?? false}
               onSelect={handleHairBack}
+              locale={locale}
             />
           </div>
         </div>
@@ -703,9 +750,10 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
           selectedId={selectedId}
           optional={layer?.optional ?? false}
           onSelect={id => onSelectAsset(categoryKey, id)}
+          locale={locale}
         />
         <div>
-          <Divider label={t('Color', 'Color')} />
+          <Divider label={t('color')} />
           <div className="flex items-center gap-3 mt-3">
             <input
               type="color"
@@ -714,7 +762,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
               className="w-9 h-9 rounded-xl cursor-pointer border-0 bg-transparent"
             />
             <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-              {t('Personalizar color', 'Customize color')}
+              {t('customizeColor')}
             </p>
             <span className="text-[9px] px-1.5 py-0.5 rounded-full ml-auto" style={{ background: 'rgba(124,58,237,0.3)', color: '#c4b5fd' }}>XTRA</span>
           </div>
@@ -730,6 +778,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
       selectedId={selectedId}
       optional={layer?.optional ?? false}
       onSelect={id => onSelectAsset(categoryKey, id)}
+      locale={locale}
     />
   )
 }
@@ -737,15 +786,16 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
 // ══════════════════════════════════════════════════════════
 // AssetGrid
 // ══════════════════════════════════════════════════════════
-function AssetGrid({ assets, selectedId, optional, onSelect }: {
+function AssetGrid({ assets, selectedId, optional, onSelect, locale }: {
   assets:     Asset[]
   selectedId: string | null
   optional:   boolean
   onSelect:   (id: string | null) => void
+  locale?:    string
 }) {
   if (assets.length === 0) {
     return (
-      <p className="text-sm py-6 text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>Sin opciones</p>
+      <p className="text-sm py-6 text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>{makeT(locale ?? 'es')('noOptions')}</p>
     )
   }
 
@@ -780,7 +830,7 @@ function AssetGrid({ assets, selectedId, optional, onSelect }: {
             }}
           >
             {asset.cdnUrl && (
-              <Image src={asset.cdnUrl} alt={asset.name} fill className="object-cover" unoptimized />
+              <Image src={pickThumb(asset)} alt={asset.name} fill className="object-cover" unoptimized />
             )}
             {asset.keywordId && (
               <span className="absolute top-1 right-1 text-[9px]">✦</span>
@@ -814,7 +864,7 @@ function KeywordSection({ collectionId, state, onUnlock, locale }: KeywordSectio
   const [value, setValue]   = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle')
   const [label, setLabel]   = useState('')
-  const t = (es: string, en: string) => locale === 'en' ? en : es
+  const t = makeT(locale)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -847,7 +897,7 @@ function KeywordSection({ collectionId, state, onUnlock, locale }: KeywordSectio
             </span>
           )}
           <span className="text-[9px] px-2 py-1 rounded-full" style={{ background: 'rgba(16,185,129,0.2)', color: '#6ee7b7' }}>
-            🔓 {state.unlockedKeywords.length} {t('clave(s)', 'key(s)')}
+            🔓 {state.unlockedKeywords.length} {t('keysUnlocked')}
           </span>
         </div>
       )}
@@ -859,7 +909,7 @@ function KeywordSection({ collectionId, state, onUnlock, locale }: KeywordSectio
             type="text"
             value={value}
             onChange={e => setValue(e.target.value.toUpperCase())}
-            placeholder={t('CÓDIGO SECRETO', 'SECRET CODE')}
+            placeholder={t('secretCode')}
             disabled={status === 'loading'}
             className="flex-1 text-xs rounded-xl px-3 py-2 focus:outline-none transition-colors"
             style={{
@@ -875,7 +925,7 @@ function KeywordSection({ collectionId, state, onUnlock, locale }: KeywordSectio
             className="text-xs font-semibold px-3 py-2 rounded-xl transition-all disabled:opacity-50 shrink-0"
             style={{ background: status === 'ok' ? 'rgba(16,185,129,0.8)' : status === 'err' ? 'rgba(239,68,68,0.7)' : 'rgba(124,58,237,0.8)', color: 'white' }}
           >
-            {status === 'loading' ? '…' : status === 'ok' ? '✓' : status === 'err' ? '✗' : t('Activar', 'Unlock')}
+            {status === 'loading' ? '…' : status === 'ok' ? '✓' : status === 'err' ? '✗' : t('unlock')}
           </button>
           <button type="button" onClick={() => { setOpen(false); setValue(''); setStatus('idle') }} className="text-xs px-2" style={{ color: 'rgba(255,255,255,0.3)' }}>✕</button>
         </form>
@@ -887,8 +937,51 @@ function KeywordSection({ collectionId, state, onUnlock, locale }: KeywordSectio
           onMouseEnter={e => (e.currentTarget.style.color = '#a78bfa')}
           onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.3)')}
         >
-          🔑 {t('Tengo un código secreto', 'I have a secret code')}
+          🔑 {t('haveSecretCode')}
         </button>
+      )}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════
+// LocaleSwitcher — selector de idioma (es/en/nl/fr)
+// ══════════════════════════════════════════════════════════
+function LocaleSwitcher({ locale, onChange }: { locale: string; onChange: (l: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const current = LOCALE_META[locale as Locale] ?? LOCALE_META.es
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="text-xs px-2 py-1 rounded-lg fx-tap flex items-center gap-1"
+        style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+      >
+        {current.flag}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            className="absolute right-0 top-full mt-1 rounded-xl overflow-hidden z-50 fx-fade-in"
+            style={{ background: '#161624', border: '1px solid rgba(255,255,255,0.08)', minWidth: 130 }}
+          >
+            {(Object.keys(LOCALE_META) as Locale[]).map(l => (
+              <button
+                key={l}
+                onClick={() => { onChange(l); setOpen(false) }}
+                className="w-full text-left text-xs px-3 py-2 flex items-center gap-2 fx-tap"
+                style={{
+                  background: l === locale ? 'rgba(124,58,237,0.2)' : 'transparent',
+                  color: l === locale ? '#c4b5fd' : 'rgba(255,255,255,0.6)',
+                }}
+              >
+                <span>{LOCALE_META[l].flag}</span> {LOCALE_META[l].label}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )

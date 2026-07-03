@@ -1,4 +1,4 @@
-import type { Asset, Layer, LayerException, LayerDefault, Keyword, Collection } from '@/types'
+import type { Asset, Layer, LayerException, LayerDefault, Keyword, Collection, SiteSettings, AvatarState } from '@/types'
 
 export function mapAsset(r: Record<string, unknown>): Asset {
   return {
@@ -73,6 +73,22 @@ export function mapCollection(r: Record<string, unknown>): Collection {
     name:   r.name as string,
     number: r.number as number,
     active: r.active as boolean,
+  }
+}
+
+export function mapSiteSettings(r: Record<string, unknown>): SiteSettings {
+  return {
+    welcomeMessageEs:    r.welcome_message_es as string | null,
+    welcomeMessageEn:    r.welcome_message_en as string | null,
+    welcomeMessageNl:    r.welcome_message_nl as string | null,
+    welcomeMessageFr:    r.welcome_message_fr as string | null,
+    creatorName:         r.creator_name as string | null,
+    socialInstagram:     r.social_instagram as string | null,
+    socialTiktok:        r.social_tiktok as string | null,
+    socialTwitter:       r.social_twitter as string | null,
+    socialWebsite:       r.social_website as string | null,
+    creatorAvatarState:  r.creator_avatar_state as AvatarState | null,
+    creatorCollectionId: r.creator_collection_id as string | null,
   }
 }
 
