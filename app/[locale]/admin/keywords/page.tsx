@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { mapKeyword, mapCollection } from '@/lib/supabase/mappers'
 import KeywordPanel from '@/components/admin/KeywordPanel'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminKeywordsPage() {
   const supabase = await createClient()
 

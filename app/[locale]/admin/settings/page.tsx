@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { mapSiteSettings } from '@/lib/supabase/mappers'
 import SettingsPanel from '@/components/admin/SettingsPanel'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminSettingsPage() {
   const supabase = await createClient()
 

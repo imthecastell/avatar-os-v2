@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { mapCollection, mapLayer, mapLayerException } from '@/lib/supabase/mappers'
 import LayerExceptionsPanel from '@/components/admin/LayerExceptionsPanel'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminExceptionsPage() {
   const supabase = await createClient()
 

@@ -124,6 +124,18 @@ body {
 .fx-tap { transition: transform 0.12s ease; }
 .fx-tap:active { transform: scale(0.92); }
 
+/* Tema Castells Season 6 — fondo con halo violeta + textura de puntos,
+   reutilizado en la pantalla de bienvenida y en el chrome del builder */
+.bg-castells {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(124,58,237,0.16), transparent 55%),
+    linear-gradient(180deg, #0d0a1a 0%, #07070e 60%);
+}
+.bg-castells-texture {
+  background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
 /* Accesibilidad: sin animaciones si el usuario las desactivó */
 @media (prefers-reduced-motion: reduce) {
   .fx-float, .fx-breathe, .fx-pop-a, .fx-pop-b, .fx-dice,

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { detectLayerFromFilename, detectEditableColors, isSVGEditable } from '@/lib/engine/asset-classifier'
 import { makeThumbnail } from '@/lib/thumbnail-gen'
-
-const BUCKET = 'avatar-os-assets'
+import { uploadBinary } from '@/lib/storage-upload'
 
 export async function POST(request: NextRequest) {
   // DB/storage operations with service role (bypasses RLS)
@@ -53,17 +52,11 @@ export async function POST(request: NextRequest) {
     ? 'image/png'
     : 'image/jpeg'
 
-  const { error: uploadError } = await supabase.storage
-    .from(BUCKET)
-    .upload(storagePath, buffer, { contentType, upsert: true })
-
-  if (uploadError) {
-    return NextResponse.json({ error: uploadError.message }, { status: 500 })
+  const uploadResult = await uploadBinary(storagePath, buffer, contentType)
+  if ('error' in uploadResult) {
+    return NextResponse.json({ error: uploadResult.error }, { status: 500 })
   }
-
-  const { data: { publicUrl: cdnUrl } } = supabase.storage
-    .from(BUCKET)
-    .getPublicUrl(storagePath)
+  const cdnUrl = uploadResult.publicUrl
 
   // Raster thumbnail for grid previews — Supabase's image-transform endpoint
   // is disabled on this project's plan, so we pre-render one ourselves.
@@ -72,12 +65,8 @@ export async function POST(request: NextRequest) {
     try {
       const thumbBuffer = await makeThumbnail(buffer)
       const thumbPath = `thumbs/${storagePath.replace(/\.[^.]+$/, '.png')}`
-      const { error: thumbErr } = await supabase.storage
-        .from(BUCKET)
-        .upload(thumbPath, thumbBuffer, { contentType: 'image/png', upsert: true })
-      if (!thumbErr) {
-        thumbUrl = supabase.storage.from(BUCKET).getPublicUrl(thumbPath).data.publicUrl
-      }
+      const thumbResult = await uploadBinary(thumbPath, thumbBuffer, 'image/png')
+      if ('publicUrl' in thumbResult) thumbUrl = thumbResult.publicUrl
     } catch {
       // Thumbnail is a nice-to-have; fall back to the full asset on failure
     }

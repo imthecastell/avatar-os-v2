@@ -3,6 +3,11 @@ import { mapCollection, mapLayer, mapAsset, mapLayerException, mapLayerDefault, 
 import type { SiteSettings } from '@/types'
 import BuilderClient from './BuilderClient'
 
+// Sin esto, Next.js cachea las consultas a Supabase por debajo y el builder
+// público puede quedar mostrando datos viejos tras cambios en el admin
+// (capas, assets, publicar) hasta que expire un caché invisible.
+export const dynamic = 'force-dynamic'
+
 export default async function BuilderPage({
   params,
 }: {

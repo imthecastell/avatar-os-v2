@@ -335,13 +335,17 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
 
   // ── Render ────────────────────────────────────────────
   return (
-    <div className="h-screen flex flex-col overflow-hidden select-none" style={{ background: '#07070e', color: 'white' }}>
+    <div className="h-screen flex flex-col overflow-hidden select-none relative bg-castells" style={{ color: 'white' }}>
+      <div className="absolute inset-0 pointer-events-none opacity-25 bg-castells-texture" />
 
       {/* HEADER */}
-      <header className="shrink-0 flex items-center justify-between px-5 h-12 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#0a0a14' }}>
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg flex items-center justify-center text-sm" style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)' }}>✦</div>
-          <span className="text-sm font-semibold">Avatar OS</span>
+      <header className="relative shrink-0 flex items-center justify-between px-4 lg:px-5 h-14 lg:h-12 border-b backdrop-blur-md" style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(10,10,20,0.6)' }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 lg:w-6 lg:h-6 rounded-lg flex items-center justify-center text-sm shrink-0" style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)' }}>✦</div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold leading-none truncate">Castells S6</p>
+            <p className="text-[8px] leading-none mt-0.5 truncate hidden lg:block" style={{ color: 'rgba(255,255,255,0.3)' }}>Pursuit of Consciencia</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -397,9 +401,13 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
 
         {/* CONTROL PANEL — bottom drawer on mobile, right sidebar on desktop */}
         <aside
-          className="flex-1 flex flex-col border-t lg:border-t-0 lg:border-l lg:w-[320px] lg:shrink-0 lg:flex-none overflow-hidden"
-          style={{ borderColor: 'rgba(255,255,255,0.05)', background: '#0b0b16' }}
+          className="relative flex-1 flex flex-col border-t lg:border-t-0 lg:border-l lg:w-[320px] lg:shrink-0 lg:flex-none overflow-hidden rounded-t-[28px] lg:rounded-t-none -mt-4 lg:mt-0"
+          style={{ borderColor: 'rgba(255,255,255,0.05)', background: 'rgba(11,11,22,0.92)', boxShadow: '0 -12px 32px rgba(0,0,0,0.35)' }}
         >
+          {/* Drag handle — solo visual, comunica "bottom sheet" en móvil */}
+          <div className="shrink-0 flex justify-center pt-2 pb-0.5 lg:hidden">
+            <div className="w-9 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.12)' }} />
+          </div>
 
           {wizardStep !== null && wizardSteps[wizardStep] ? (<>
             {/* ── RUTA GUIADA (primera visita) ── */}

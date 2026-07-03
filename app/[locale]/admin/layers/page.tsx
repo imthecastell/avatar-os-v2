@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { mapLayer, mapLayerException, mapLayerDefault, mapCollection, mapAsset } from '@/lib/supabase/mappers'
 import LayerSandwich from '@/components/admin/LayerSandwich'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminLayersPage() {
   const supabase = await createClient()
 

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { uploadBinary } from '@/lib/storage-upload'
 import sharp from 'sharp'
 
-const BUCKET = 'avatar-os-assets'
 const SIZE_THRESHOLD = 300 * 1024 // real vector SVGs in this project are all well under this
 
 /**
@@ -60,17 +60,14 @@ export async function POST(request: NextRequest) {
       const newFilename    = asset.filename.replace(/\.svg$/i, '.png')
       const newStoragePath = asset.storage_path.replace(/\.svg$/i, '.png')
 
-      const { error: upErr } = await supabase.storage
-        .from(BUCKET)
-        .upload(newStoragePath, png, { contentType: 'image/png', upsert: true })
-      if (upErr) { results.push({ label, ok: false, detail: `upload: ${upErr.message}` }); continue }
-
-      const { data: { publicUrl: newCdnUrl } } = supabase.storage.from(BUCKET).getPublicUrl(newStoragePath)
+      const upResult = await uploadBinary(newStoragePath, png, 'image/png')
+      if ('error' in upResult) { results.push({ label, ok: false, detail: `upload: ${upResult.error}` }); continue }
+      const newCdnUrl = upResult.publicUrl
 
       const thumb = await sharp(png).resize(320, 320, { fit: 'inside' }).png({ compressionLevel: 9, quality: 80 }).toBuffer()
       const thumbPath = `thumbs/${newStoragePath}`
-      await supabase.storage.from(BUCKET).upload(thumbPath, thumb, { contentType: 'image/png', upsert: true })
-      const { data: { publicUrl: thumbUrl } } = supabase.storage.from(BUCKET).getPublicUrl(thumbPath)
+      const thumbResult = await uploadBinary(thumbPath, thumb, 'image/png')
+      const thumbUrl = 'publicUrl' in thumbResult ? thumbResult.publicUrl : null
 
       const { error: patchErr } = await supabase
         .from('assets')
@@ -96,11 +93,15 @@ export async function POST(request: NextRequest) {
   // Segunda pasada: generar thumb_url para assets raster que aún no tengan
   // (fondos y los recién convertidos arriba). Supabase's image-transform
   // endpoint está deshabilitado en este plan, así que se pre-renderiza aquí.
-  const { data: rasterAssets } = await supabase
+  // force=1 regenera todos los thumbs (útil tras arreglar un bug de subida);
+  // sin el flag, solo rellena los que faltan.
+  const force = new URL(request.url).searchParams.get('force') === '1'
+  let rasterQuery = supabase
     .from('assets')
     .select('id, layer_key, name, storage_path, cdn_url')
     .in('file_type', ['png', 'jpg'])
-    .is('thumb_url', null)
+  if (!force) rasterQuery = rasterQuery.is('thumb_url', null)
+  const { data: rasterAssets } = await rasterQuery
 
   for (const asset of rasterAssets ?? []) {
     const label = `${asset.layer_key}/${asset.name} (thumb)`
@@ -109,10 +110,9 @@ export async function POST(request: NextRequest) {
       const buffer  = Buffer.from(await fileRes.arrayBuffer())
       const thumb = await sharp(buffer).resize(320, 320, { fit: 'inside', withoutEnlargement: true }).png({ compressionLevel: 9, quality: 80 }).toBuffer()
       const thumbPath = `thumbs/${asset.storage_path.replace(/\.[^.]+$/, '.png')}`
-      const { error: upErr } = await supabase.storage.from(BUCKET).upload(thumbPath, thumb, { contentType: 'image/png', upsert: true })
-      if (upErr) { results.push({ label, ok: false, detail: `upload: ${upErr.message}` }); continue }
-      const { data: { publicUrl: thumbUrl } } = supabase.storage.from(BUCKET).getPublicUrl(thumbPath)
-      const { error: patchErr } = await supabase.from('assets').update({ thumb_url: thumbUrl }).eq('id', asset.id)
+      const upResult = await uploadBinary(thumbPath, thumb, 'image/png')
+      if ('error' in upResult) { results.push({ label, ok: false, detail: `upload: ${upResult.error}` }); continue }
+      const { error: patchErr } = await supabase.from('assets').update({ thumb_url: upResult.publicUrl }).eq('id', asset.id)
       if (patchErr) { results.push({ label, ok: false, detail: `db: ${patchErr.message}` }); continue }
       results.push({ label, ok: true, detail: `${(buffer.length / 1024).toFixed(0)}KB → ${(thumb.length / 1024).toFixed(0)}KB thumb` })
     } catch (err) {

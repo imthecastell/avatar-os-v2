@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { mapAsset, mapLayer, mapCollection, mapKeyword } from '@/lib/supabase/mappers'
 import Studio from '@/components/admin/Studio'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminPage() {
   const supabase = await createClient()
 

@@ -3,6 +3,8 @@ import { mapAsset, mapLayer, mapCollection } from '@/lib/supabase/mappers'
 import BatchUploader from '@/components/admin/BatchUploader'
 import AssetPanel from '@/components/admin/AssetPanel'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminAssetsPage({
   params,
 }: {

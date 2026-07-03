@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { makeThumbnail } from '@/lib/thumbnail-gen'
-
-const BUCKET = 'avatar-os-assets'
+import { uploadBinary } from '@/lib/storage-upload'
 
 // Records an asset in the DB after the browser has uploaded it directly to Supabase Storage.
 export async function POST(request: NextRequest) {
@@ -24,12 +23,8 @@ export async function POST(request: NextRequest) {
       const buffer  = Buffer.from(await fileRes.arrayBuffer())
       const thumbBuffer = await makeThumbnail(buffer)
       const thumbPath = `thumbs/${String(storagePath).replace(/\.[^.]+$/, '.png')}`
-      const { error: thumbErr } = await supabase.storage
-        .from(BUCKET)
-        .upload(thumbPath, thumbBuffer, { contentType: 'image/png', upsert: true })
-      if (!thumbErr) {
-        thumbUrl = supabase.storage.from(BUCKET).getPublicUrl(thumbPath).data.publicUrl
-      }
+      const thumbResult = await uploadBinary(thumbPath, thumbBuffer, 'image/png')
+      if ('publicUrl' in thumbResult) thumbUrl = thumbResult.publicUrl
     } catch {
       // Thumbnail is a nice-to-have; fall back to the full asset on failure
     }

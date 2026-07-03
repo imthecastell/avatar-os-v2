@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { mapCollection, mapLayerDefault } from '@/lib/supabase/mappers'
 import LayerDefaultsPanel from '@/components/admin/LayerDefaultsPanel'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminDefaultsPage() {
   const supabase = await createClient()
 

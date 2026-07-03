@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { mapCollection } from '@/lib/supabase/mappers'
 import CollectionsPanel from '@/components/admin/CollectionsPanel'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminCollectionsPage() {
   const supabase = await createClient()
   const { data: raw } = await supabase.from('collections').select('*').order('number')

@@ -61,17 +61,11 @@ export default function WelcomeScreen({ locale, collection, layers, assets, sett
 
   return (
     <div
-      className="h-screen w-full flex flex-col items-center overflow-y-auto relative fx-fade-in"
-      style={{
-        background: 'radial-gradient(circle at 50% 0%, rgba(124,58,237,0.18), transparent 55%), linear-gradient(180deg, #0d0a1a 0%, #07070e 60%)',
-        color: 'white',
-      }}
+      className="h-screen w-full flex flex-col items-center overflow-y-auto relative fx-fade-in bg-castells"
+      style={{ color: 'white' }}
     >
       {/* Textura decorativa de fondo */}
-      <div className="absolute inset-0 pointer-events-none opacity-40" style={{
-        backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)',
-        backgroundSize: '28px 28px',
-      }} />
+      <div className="absolute inset-0 pointer-events-none opacity-40 bg-castells-texture" />
 
       <div className="relative w-full max-w-sm flex flex-col items-center px-6 pt-10 pb-8 gap-6">
 
