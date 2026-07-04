@@ -8,6 +8,7 @@ export const DICT = {
   skipGuide:          { es: 'Saltar guía',                               en: 'Skip guide',                    nl: 'Gids overslaan',                    fr: 'Passer le guide' },
   doneCustomize:      { es: '¡Listo! Personalizar todo',                 en: 'Done! Customize everything',    nl: 'Klaar! Alles aanpassen',            fr: 'Terminé ! Tout personnaliser' },
   next:               { es: 'Siguiente',                                 en: 'Next',                          nl: 'Volgende',                          fr: 'Suivant' },
+  requiredHint:       { es: 'Elige una opción para continuar',           en: 'Pick an option to continue',    nl: 'Kies een optie om verder te gaan', fr: 'Choisis une option pour continuer' },
   skinTone:           { es: 'Tono de piel',                              en: 'Skin tone',                     nl: 'Huidskleur',                        fr: 'Teint de peau' },
   fantasyHint:        { es: 'Bordes punteados = tonos de fantasía',      en: 'Dashed border = fantasy tones', nl: 'Gestippelde rand = fantasiekleuren', fr: 'Bordure pointillée = teintes fantaisie' },
   front:              { es: 'Frente',                                    en: 'Front',                         nl: 'Voorkant',                          fr: 'Devant' },

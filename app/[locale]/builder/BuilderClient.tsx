@@ -334,6 +334,20 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     )
   )
 
+  // Capas obligatorias (optional=false) que aún no tienen asset elegido —
+  // mientras existan, no se puede avanzar el wizard ni exportar el avatar.
+  // hair-front no está en visibleLayers (vive dentro del tab "Cabello") pero
+  // igual puede marcarse obligatoria, así que se incluye a mano.
+  const requirableLayers = layers.filter(l =>
+    !l.optional &&
+    assets.some(a => a.layerKey === l.layerKey) &&
+    (l.visibleInBuilder || l.layerKey === 'hair-front')
+  )
+  const missingRequiredKeys = requirableLayers.filter(l => !state.selectedAssets[l.layerKey]).map(l => l.layerKey)
+  const currentStepMissing = wizardStep !== null && wizardSteps[wizardStep]
+    ? wizardSteps[wizardStep].keys.filter(k => missingRequiredKeys.includes(k))
+    : []
+
   function finishWizard() {
     localStorage.setItem(WIZARD_DONE_KEY, '1')
     setWizardStep(null)
@@ -481,7 +495,9 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
           <LocaleSwitcher locale={locale} onChange={setLocale} />
           <button
             onClick={handleExport}
-            className="text-xs font-semibold px-4 py-1.5 rounded-xl fx-tap"
+            disabled={missingRequiredKeys.length > 0}
+            title={missingRequiredKeys.length > 0 ? t('requiredHint') : undefined}
+            className="text-xs font-semibold px-4 py-1.5 rounded-xl fx-tap disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: 'white' }}
           >
             ✨ {t('createPfp')}
@@ -599,7 +615,9 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
               )}
               <button
                 onClick={nextWizardStep}
-                className="flex-1 text-sm font-semibold py-2.5 lg:py-3 rounded-2xl fx-shimmer fx-tap"
+                disabled={currentStepMissing.length > 0}
+                title={currentStepMissing.length > 0 ? t('requiredHint') : undefined}
+                className="flex-1 text-sm font-semibold py-2.5 lg:py-3 rounded-2xl fx-shimmer fx-tap disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{
                   background: 'linear-gradient(90deg,#6d28d9,#9333ea,#c084fc,#9333ea,#6d28d9)',
                   color: 'white',
@@ -611,6 +629,11 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                   : `${t('next')} →`}
               </button>
             </div>
+            {currentStepMissing.length > 0 && (
+              <p className="text-[10px] text-center pb-2 px-3" style={{ color: '#fca5a5' }}>
+                {t('requiredHint')}
+              </p>
+            )}
           </>) : (<>
 
           {/* Tab bar — horizontally scrollable */}
@@ -677,9 +700,16 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
 
           {/* Export CTA */}
           <div className="shrink-0 px-3 pb-3 lg:px-4 lg:pb-4">
+            {missingRequiredKeys.length > 0 && (
+              <p className="text-[10px] text-center pb-2" style={{ color: '#fca5a5' }}>
+                {t('requiredHint')}
+              </p>
+            )}
             <button
               onClick={handleExport}
-              className="w-full text-sm font-semibold py-2.5 lg:py-3 rounded-2xl fx-shimmer fx-tap"
+              disabled={missingRequiredKeys.length > 0}
+              title={missingRequiredKeys.length > 0 ? t('requiredHint') : undefined}
+              className="w-full text-sm font-semibold py-2.5 lg:py-3 rounded-2xl fx-shimmer fx-tap disabled:opacity-40 disabled:cursor-not-allowed"
               style={{
                 background: 'linear-gradient(90deg,#6d28d9,#9333ea,#c084fc,#9333ea,#6d28d9)',
                 color: 'white',

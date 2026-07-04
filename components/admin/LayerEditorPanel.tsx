@@ -30,6 +30,23 @@ export default function LayerEditorPanel({
   const [savingName,  setSavingName]  = useState(false)
   const [addingKw,    setAddingKw]    = useState(false)
 
+  // ── ¿Es obligatorio elegir un asset de esta capa? ──
+  const [optional,       setOptional]       = useState(layer.optional)
+  const [savingOptional, setSavingOptional] = useState(false)
+
+  async function toggleOptional(next: boolean) {
+    setOptional(next)
+    setSavingOptional(true)
+    const res = await fetch('/api/layers', {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ id: layerId, optional: next }),
+    })
+    setSavingOptional(false)
+    if (!res.ok) { setOptional(!next); alert('No se pudo guardar el cambio') }
+    else onUpdated()
+  }
+
   // ── Reglas de la capa: default de color/posición para todos sus assets ──
   const roleOptions: [string, string][] = Array.from(
     new Map(initialAssets.flatMap(a => a.colorMap).map(c => [c.role, c.label || c.role])).entries()
@@ -192,6 +209,27 @@ export default function LayerEditorPanel({
               {savingName ? '…' : '✓'}
             </button>
           </div>
+        </div>
+
+        {/* ¿Es obligatorio elegir un asset de esta capa? */}
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-white">Selección obligatoria</p>
+            <p className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              {optional
+                ? 'Opcional — el usuario puede dejar esta capa sin elegir nada'
+                : 'Obligatoria — el usuario no puede avanzar en el builder sin elegir un asset'}
+            </p>
+          </div>
+          <button
+            onClick={() => toggleOptional(!optional)}
+            disabled={savingOptional}
+            className="w-10 h-6 rounded-full transition-all shrink-0 relative disabled:opacity-50"
+            style={{ background: !optional ? 'rgba(124,58,237,0.8)' : 'rgba(255,255,255,0.1)' }}
+            title={optional ? 'Marcar como obligatoria' : 'Marcar como opcional'}
+          >
+            <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all" style={{ left: !optional ? '18px' : '2px' }} />
+          </button>
         </div>
 
         {/* Reglas de la capa: default de color/posición para todos sus assets */}
