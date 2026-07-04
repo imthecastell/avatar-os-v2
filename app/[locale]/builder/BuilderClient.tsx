@@ -87,11 +87,20 @@ const SKIN_TONES = [
   { hex: '#10B981', emoji: '💚', fantasy: true },
 ]
 
-// Colores de cabello predeterminados
+// Colores de cabello predeterminados: 8 tonos naturales + 3 de fantasía
+// (mismo patrón que SKIN_TONES — borde punteado + ✦ para distinguirlos)
 const HAIR_COLORS = [
-  '#1A1A1A', '#3B2314', '#6B3A2A', '#A0522D',
-  '#C9A96E', '#E8D5A3', '#B22222', '#708090',
-  '#E91E8C', '#7C3AED', '#0EA5E9', '#10B981',
+  { hex: '#1A1A1A', fantasy: false }, // negro
+  { hex: '#3B2314', fantasy: false }, // castaño oscuro
+  { hex: '#6B3A2A', fantasy: false }, // castaño
+  { hex: '#A0522D', fantasy: false }, // caoba
+  { hex: '#C9A96E', fantasy: false }, // rubio oscuro
+  { hex: '#E8D5A3', fantasy: false }, // rubio
+  { hex: '#B22222', fantasy: false }, // pelirrojo
+  { hex: '#708090', fantasy: false }, // gris plateado
+  { hex: '#E91E8C', fantasy: true },  // rosa fantasía
+  { hex: '#7C3AED', fantasy: true },  // violeta fantasía
+  { hex: '#0EA5E9', fantasy: true },  // azul fantasía
 ]
 
 
@@ -387,9 +396,10 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
       const front = back ? assets.find(a => a.layerKey === 'hair-front' && a.name === back.name) : null
       sel['hair-front'] = front?.id ?? null
     }
+    const naturalHair = HAIR_COLORS.filter(c => !c.fantasy)
     const skin = SKIN_TONES[Math.floor(Math.random() * 6)] // solo oficiales
-    const hair = HAIR_COLORS[Math.floor(Math.random() * 8)] // solo naturales
-    setState(s => ({ ...s, selectedAssets: sel, tokens: { ...s.tokens, 'skin-color': skin.hex, 'hair-color': hair } }))
+    const hair = naturalHair[Math.floor(Math.random() * naturalHair.length)] // solo naturales
+    setState(s => ({ ...s, selectedAssets: sel, tokens: { ...s.tokens, 'skin-color': skin.hex, 'hair-color': hair.hex } }))
   }
 
   async function handleExport() {
@@ -822,23 +832,31 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
         <div>
           <Divider label={t('color')} />
           <div className="flex flex-wrap gap-2 mt-3">
-            {HAIR_COLORS.map(hex => {
-              const active = state.tokens['hair-color'] === hex
+            {HAIR_COLORS.map(color => {
+              const active = state.tokens['hair-color'] === color.hex
               return (
                 <button
-                  key={hex}
-                  onClick={() => onHairColorChange(hex)}
-                  className="w-8 h-8 rounded-full transition-all fx-tap shrink-0"
+                  key={color.hex}
+                  onClick={() => onHairColorChange(color.hex)}
+                  className="w-8 h-8 rounded-full transition-all relative fx-tap shrink-0"
                   style={{
-                    background: hex,
-                    outline: active ? '2.5px solid #a78bfa' : '1px solid rgba(255,255,255,0.1)',
+                    background: color.hex,
+                    outline: active ? '2.5px solid #a78bfa' : color.fantasy ? '1px dashed rgba(255,255,255,0.2)' : '1px solid rgba(255,255,255,0.1)',
                     outlineOffset: active ? 2 : 0,
                     transform: active ? 'scale(1.15)' : undefined,
+                    boxShadow: active ? `0 0 14px ${color.hex}80` : undefined,
                   }}
-                />
+                >
+                  {color.fantasy && (
+                    <span className="absolute -top-1 -right-1 text-[8px] leading-none">✦</span>
+                  )}
+                </button>
               )
             })}
           </div>
+          <p className="text-[9px] mt-2" style={{ color: 'rgba(255,255,255,0.2)' }}>
+            {t('fantasyHint')}
+          </p>
           <div className="mt-3 flex items-center gap-3">
             <input
               type="color"
