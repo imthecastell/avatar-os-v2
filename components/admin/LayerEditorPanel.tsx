@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import type { Asset, Keyword } from '@/types'
+import type { Asset, Keyword, Layer } from '@/types'
 import { pickThumb } from '@/lib/thumb'
 
 interface Props {
+  layer:        Layer
   layerId:      string
   layerKey:     string
   layerName:    string
@@ -17,7 +18,7 @@ interface Props {
 }
 
 export default function LayerEditorPanel({
-  layerId, layerName, assets: initialAssets, keywords: initialKws, collectionId, onBack, onUpdated,
+  layer, layerId, layerName, assets: initialAssets, keywords: initialKws, collectionId, onBack, onUpdated,
 }: Props) {
   const [name,        setName]        = useState(layerName)
   const [localAssets, setLocalAssets] = useState<Asset[]>(initialAssets)
@@ -28,6 +29,61 @@ export default function LayerEditorPanel({
   const [newKwMaster, setNewKwMaster] = useState(false)
   const [savingName,  setSavingName]  = useState(false)
   const [addingKw,    setAddingKw]    = useState(false)
+
+  // ── Reglas de la capa: default de color/posición para todos sus assets ──
+  const roleOptions: [string, string][] = Array.from(
+    new Map(initialAssets.flatMap(a => a.colorMap).map(c => [c.role, c.label || c.role])).entries()
+  )
+  const [rulesOn,     setRulesOn]     = useState(layer.colorEditable || layer.positionEditable)
+  const [colorOn,     setColorOn]     = useState(layer.colorEditable)
+  const [positionOn,  setPositionOn]  = useState(layer.positionEditable)
+  const [targetRole,  setTargetRole]  = useState(layer.colorTargetRole ?? roleOptions[0]?.[0] ?? '')
+  const [useSwatches, setUseSwatches] = useState(layer.colorMode === 'swatches' || layer.colorMode === 'both')
+  const [useCustom,   setUseCustom]   = useState(layer.colorMode === 'wheel' || layer.colorMode === 'both')
+  const [swatches,    setSwatches]    = useState<string[]>(layer.colorSwatches ?? ['#ffffff', '#000000', '#ff0000'])
+  const [savingRules, setSavingRules] = useState(false)
+  const [resetting,   setResetting]   = useState(false)
+
+  async function saveRules() {
+    setSavingRules(true)
+    const colorMode = useSwatches && useCustom ? 'both' : useCustom ? 'wheel' : 'swatches'
+    const res = await fetch('/api/layers', {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id:                layerId,
+        position_editable: rulesOn && positionOn,
+        color_editable:    rulesOn && colorOn,
+        color_target_role: rulesOn && colorOn ? (targetRole || null) : null,
+        color_mode:        colorMode,
+        color_swatches:    useSwatches ? swatches : null,
+      }),
+    })
+    setSavingRules(false)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({} as { error?: string }))
+      alert(`No se pudo guardar: ${d.error ?? `HTTP ${res.status}`}\n\n¿Se aplicó la migración 012_layer_rules.sql en Supabase?`)
+      return
+    }
+    onUpdated()
+  }
+
+  async function resetLayerAssets() {
+    if (!confirm(`¿Reiniciar todos los assets de "${layerName}"? Esto borra los ajustes de posición y color configurados individualmente en cada asset, para que vuelvan a heredar el default de la capa.`)) return
+    setResetting(true)
+    const res = await fetch('/api/layers/reset-assets', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ layerId }),
+    })
+    setResetting(false)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({} as { error?: string }))
+      alert(`No se pudo reiniciar: ${d.error ?? `HTTP ${res.status}`}`)
+      return
+    }
+    onUpdated()
+  }
 
   async function saveName() {
     if (!name.trim() || name === layerName) return
@@ -136,6 +192,116 @@ export default function LayerEditorPanel({
               {savingName ? '…' : '✓'}
             </button>
           </div>
+        </div>
+
+        {/* Reglas de la capa: default de color/posición para todos sus assets */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.25)' }}>
+              Reglas de la capa
+            </p>
+          </div>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div>
+              <p className="text-xs font-medium text-white">¿Esta capa es editable?</p>
+              <p className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                Default para todos los assets — un asset puntual puede anularlo desde su propia configuración
+              </p>
+            </div>
+            <button
+              onClick={() => setRulesOn(v => !v)}
+              className="w-10 h-6 rounded-full transition-all shrink-0 relative"
+              style={{ background: rulesOn ? 'rgba(124,58,237,0.8)' : 'rgba(255,255,255,0.1)' }}
+            >
+              <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all" style={{ left: rulesOn ? '18px' : '2px' }} />
+            </button>
+          </div>
+
+          {rulesOn && (
+            <div className="p-2.5 rounded-xl space-y-2.5" style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.15)' }}>
+              <label className="flex items-center gap-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                <input type="checkbox" checked={positionOn} onChange={e => setPositionOn(e.target.checked)} />
+                Posición y escala
+              </label>
+              <label className="flex items-center gap-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                <input type="checkbox" checked={colorOn} onChange={e => setColorOn(e.target.checked)} />
+                Color
+              </label>
+
+              {colorOn && (
+                <div className="pl-4 space-y-2 pt-1">
+                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    Región de color editable (ej. chaqueta gris con camiseta azul debajo — elige la región azul)
+                  </p>
+                  {roleOptions.length === 0 ? (
+                    <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>Ningún asset de esta capa tiene colores detectados todavía.</p>
+                  ) : (
+                    <select
+                      value={targetRole}
+                      onChange={e => setTargetRole(e.target.value)}
+                      className="w-full text-[10px] rounded-lg px-2 py-1.5 border focus:outline-none"
+                      style={inputS}
+                    >
+                      {roleOptions.map(([value, roleLabel]) => <option key={value} value={value}>{roleLabel}</option>)}
+                    </select>
+                  )}
+                  <label className="flex items-center gap-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    <input type="checkbox" checked={useSwatches} onChange={e => setUseSwatches(e.target.checked)} />
+                    Activar colores por defecto (muestras fijas)
+                  </label>
+                  {useSwatches && (
+                    <div className="flex flex-wrap items-center gap-2 pl-5">
+                      {swatches.map((hex, i) => (
+                        <div key={i} className="relative">
+                          <input
+                            type="color"
+                            value={hex}
+                            onChange={e => setSwatches(sw => sw.map((s, idx) => idx === i ? e.target.value : s))}
+                            className="w-6 h-6 rounded-lg cursor-pointer border-0"
+                          />
+                          {swatches.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setSwatches(sw => sw.filter((_, idx) => idx !== i))}
+                              className="absolute -top-1 -right-1 w-3 h-3 rounded-full text-[7px] flex items-center justify-center"
+                              style={{ background: 'rgba(239,68,68,0.8)', color: 'white' }}
+                            >✕</button>
+                          )}
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setSwatches(sw => [...sw, '#ffffff'])}
+                        className="w-6 h-6 rounded-lg flex items-center justify-center text-xs"
+                        style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)' }}
+                      >+</button>
+                    </div>
+                  )}
+                  <label className="flex items-center gap-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    <input type="checkbox" checked={useCustom} onChange={e => setUseCustom(e.target.checked)} />
+                    Permitir color personalizado (rueda libre)
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
+          <button
+            onClick={saveRules}
+            disabled={savingRules}
+            className="w-full mt-2 text-[10px] font-semibold py-2 rounded-xl disabled:opacity-50 transition-all"
+            style={{ background: 'rgba(124,58,237,0.7)', color: 'white' }}
+          >
+            {savingRules ? 'Guardando…' : 'Guardar reglas'}
+          </button>
+          <button
+            onClick={resetLayerAssets}
+            disabled={resetting}
+            className="w-full mt-1.5 text-[9px] py-1.5 rounded-lg disabled:opacity-50 transition-all"
+            style={{ background: 'rgba(239,68,68,0.12)', color: '#fca5a5' }}
+          >
+            {resetting ? 'Reiniciando…' : `↺ Reiniciar ajustes individuales (${localAssets.length} assets)`}
+          </button>
         </div>
 
         {/* Assets — keyword assignment */}

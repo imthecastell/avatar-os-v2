@@ -1051,6 +1051,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
         {/* Layer editor mode */}
         {layerEditMode && selectedLayer && (
           <LayerEditorPanel
+            layer={selectedLayer}
             layerId={selectedLayer.id}
             layerKey={selectedLayer.layerKey}
             layerName={selectedLayer.labelEs}
