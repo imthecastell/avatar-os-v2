@@ -16,6 +16,19 @@ export default function LayerStack({ collections, layers, exceptions, defaults }
 
   function handleDragStart(i: number) { setDragIdx(i) }
 
+  async function toggleOptional(id: string, optional: boolean) {
+    setItems(prev => prev.map(l => l.id === id ? { ...l, optional } : l))
+    const res = await fetch('/api/layers', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, optional }),
+    })
+    if (!res.ok) {
+      setItems(prev => prev.map(l => l.id === id ? { ...l, optional: !optional } : l))
+      alert('No se pudo guardar el cambio')
+    }
+  }
+
   function handleDragOver(e: React.DragEvent, i: number) {
     e.preventDefault()
     if (dragIdx === null || dragIdx === i) return
@@ -70,7 +83,16 @@ export default function LayerStack({ collections, layers, exceptions, defaults }
               <span className="flex-1 text-gray-200">{layer.labelEs}</span>
               <span className="text-xs text-gray-600 w-14">{layer.type}</span>
               <span className="text-xs text-violet-400 w-24">{layer.colorToken || '—'}</span>
-              <span className="text-xs text-gray-600">{layer.optional ? 'opcional' : '—'}</span>
+              <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none w-24 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={layer.optional}
+                  onChange={e => toggleOptional(layer.id, e.target.checked)}
+                  onClick={e => e.stopPropagation()}
+                  className="accent-violet-500 w-3.5 h-3.5"
+                />
+                {layer.optional ? 'Opcional' : 'Obligatoria'}
+              </label>
             </div>
           ))}
         </div>
