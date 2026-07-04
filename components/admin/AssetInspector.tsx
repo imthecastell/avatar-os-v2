@@ -49,6 +49,27 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
   const [ruleMode,        setRuleMode]        = useState<'wheel' | 'swatches'>(existingRule?.mode ?? 'wheel')
   const [ruleSwatches,    setRuleSwatches]    = useState<string[]>(existingRule?.swatches ?? ['#ffffff', '#000000', '#ff0000'])
 
+  // Color propio desbloqueable por palabra clave (ej. lentes negros por defecto,
+  // pero al tener "discord" o cualquiera de N palabras habilitadas, el usuario
+  // puede elegir entre una selección de muestras para ESTE asset específico).
+  // Cada palabra clave habilitada guarda su propia fila en color_unlocks, todas
+  // apuntando al mismo target_asset_id/target_role/swatches — así cualquiera de
+  // ellas (sola o combinada) activa el mismo control.
+  const ownColorRules = colorUnlocks.filter(u => u.targetAssetId === asset.id)
+  const ownRoleOptions: [string, string][] = asset.colorMap.length > 0
+    ? Array.from(new Map(asset.colorMap.map(c => [c.role, c.label || c.role])).entries())
+    : ROLE_OPTIONS.map(r => [r.value, r.label] as [string, string])
+  const [ownColorOn,     setOwnColorOn]     = useState(ownColorRules.length > 0)
+  const [ownKeywordIds,  setOwnKeywordIds]  = useState<string[]>(
+    ownColorRules.map(u => u.keywordId).filter((id): id is string => !!id)
+  )
+  const [ownTargetRole,  setOwnTargetRole]  = useState<string>(ownColorRules[0]?.targetRole ?? ownRoleOptions[0]?.[0] ?? 'skin')
+  const [ownSwatches,    setOwnSwatches]    = useState<string[]>(ownColorRules[0]?.swatches ?? ['#ffffff', '#000000', '#ff0000'])
+
+  function toggleOwnKeyword(id: string) {
+    setOwnKeywordIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])
+  }
+
   function updateTransform(key: keyof AssetTransform, val: number) {
     setTransform(t => ({ ...t, [key]: val }))
   }
@@ -111,6 +132,39 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
       }
     } else if (existingRule) {
       await fetch(`/api/color-unlocks?id=${existingRule.id}`, { method: 'DELETE' })
+    }
+
+    // Color propio desbloqueable por N palabras clave (ej. Lentes): se borra todo
+    // lo existente y se recrea una fila por cada palabra clave seleccionada —
+    // más simple que diffear altas/bajas y el volumen es siempre pequeño.
+    if (ownColorRules.length > 0) {
+      await Promise.all(ownColorRules.map(u => fetch(`/api/color-unlocks?id=${u.id}`, { method: 'DELETE' })))
+    }
+    if (ownColorOn) {
+      // Sin ninguna palabra clave marcada, el color queda siempre disponible
+      // (ej. mostacho: no necesita gatillo, solo mostrar las muestras).
+      const kwList: (string | null)[] = ownKeywordIds.length > 0 ? ownKeywordIds : [null]
+      for (const kwId of kwList) {
+        const res = await fetch('/api/color-unlocks', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            collection_id:    asset.collectionId,
+            keyword_id:       kwId,
+            target_layer_key: asset.layerKey,
+            target_asset_id:  asset.id,
+            target_role:      ownTargetRole,
+            mode:             'swatches',
+            swatches:         ownSwatches,
+          }),
+        })
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({} as { error?: string }))
+          alert(`El asset se guardó, pero el desbloqueo de color falló: ${d.error ?? `HTTP ${res.status}`}\n\n¿Se aplicó la migración 011_color_unlock_target_asset.sql en Supabase?`)
+          setSaving(false)
+          return
+        }
+      }
     }
 
     setSaving(false)
@@ -313,6 +367,91 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
               </div>
             )}
           </div>
+
+          {/* Colores propios desbloqueables por palabra clave (ej. Lentes negros
+              por defecto, pero con "discord" u otras claves habilita muestras) */}
+          {asset.colorMap.length > 0 && (
+            <div>
+              <Toggle
+                label="Muestras de color para este asset"
+                hint="Ej. Lentes negros por defecto — marca palabras clave para exigir alguna (con una sola basta), o deja ninguna marcada para que el color esté siempre disponible (ej. mostacho)"
+                value={ownColorOn}
+                onChange={setOwnColorOn}
+              />
+              {ownColorOn && (
+                <div className="mt-3 p-3 rounded-xl space-y-2.5" style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.15)' }}>
+                  <div>
+                    <p className="text-[10px] mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      Palabras clave que desbloquean la función (opcional — ninguna marcada = siempre disponible):
+                    </p>
+                    {keywords.length === 0 ? (
+                      <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.25)' }}>No hay palabras clave en esta colección todavía.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {keywords.map(k => {
+                          const checked = ownKeywordIds.includes(k.id)
+                          return (
+                            <button
+                              key={k.id}
+                              type="button"
+                              onClick={() => toggleOwnKeyword(k.id)}
+                              className="text-[10px] font-medium px-2.5 py-1 rounded-lg transition-all"
+                              style={{
+                                background: checked ? 'rgba(124,58,237,0.6)' : 'rgba(255,255,255,0.05)',
+                                color: checked ? 'white' : 'rgba(255,255,255,0.4)',
+                              }}
+                            >
+                              {checked ? '✓ ' : ''}{k.keyword}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  {ownRoleOptions.length > 1 && (
+                    <select
+                      value={ownTargetRole}
+                      onChange={e => setOwnTargetRole(e.target.value)}
+                      className="w-full text-[10px] rounded-lg px-2 py-1.5 border focus:outline-none"
+                      style={inputS}
+                    >
+                      {ownRoleOptions.map(([value, roleLabel]) => <option key={value} value={value}>{roleLabel}</option>)}
+                    </select>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {ownSwatches.map((hex, i) => (
+                      <div key={i} className="relative">
+                        <input
+                          type="color"
+                          value={hex}
+                          onChange={e => setOwnSwatches(sw => sw.map((s, idx) => idx === i ? e.target.value : s))}
+                          className="w-7 h-7 rounded-lg cursor-pointer border-0"
+                        />
+                        {ownSwatches.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setOwnSwatches(sw => sw.filter((_, idx) => idx !== i))}
+                            className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center"
+                            style={{ background: 'rgba(239,68,68,0.8)', color: 'white' }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setOwnSwatches(sw => [...sw, '#ffffff'])}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
+                      style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)' }}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Allow builder-side transform (solo cabello frontal) */}
           {asset.layerKey === 'hair-front' && (

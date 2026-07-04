@@ -108,7 +108,8 @@ export default function KeywordPanel({ collections, keywords: initial, layers, c
     }
     setColorUnlocks(prev => [...prev, {
       id: data.id, collectionId: data.collection_id, keywordId: data.keyword_id, scopeAssetId: data.scope_asset_id,
-      targetLayerKey: data.target_layer_key, targetRole: data.target_role, mode: data.mode, swatches: data.swatches,
+      targetLayerKey: data.target_layer_key, targetAssetId: data.target_asset_id ?? null, targetRole: data.target_role,
+      mode: data.mode, swatches: data.swatches,
     }])
   }
 

@@ -157,13 +157,29 @@ function getActiveColorUnlocks(
   colorUnlocks: ColorUnlock[], state: AvatarState, masterKeywordIds: string[], assets: Asset[], layerKey: string
 ): ColorUnlock[] {
   const hasMaster = state.unlockedKeywords.some(id => masterKeywordIds.includes(id))
-  return colorUnlocks.filter(u => {
+  const matches = colorUnlocks.filter(u => {
     if (u.targetLayerKey !== layerKey) return false
+    // targetAssetId: la regla solo aplica si ESTE asset específico está
+    // seleccionado en la capa (ej. "Lentes" tiene color desbloqueable, otro
+    // accesorio de la misma capa no).
+    if (u.targetAssetId && state.selectedAssets[layerKey] !== u.targetAssetId) return false
     if (u.keywordId && !hasMaster && !state.unlockedKeywords.includes(u.keywordId)) return false
     if (u.scopeAssetId) {
       const scopeAsset = assets.find(a => a.id === u.scopeAssetId)
       if (!scopeAsset || state.selectedAssets[scopeAsset.layerKey] !== u.scopeAssetId) return false
     }
+    return true
+  })
+
+  // Varias palabras clave pueden desbloquear la MISMA función de color (ej.
+  // "Lentes" con 3-4 palabras válidas) — cada una crea su propia fila, pero
+  // si más de una está activa a la vez deben mostrarse como un solo control,
+  // no repetido.
+  const seen = new Set<string>()
+  return matches.filter(u => {
+    const sig = `${u.targetAssetId ?? ''}|${u.targetRole}|${u.mode}|${(u.swatches ?? []).join(',')}`
+    if (seen.has(sig)) return false
+    seen.add(sig)
     return true
   })
 }
