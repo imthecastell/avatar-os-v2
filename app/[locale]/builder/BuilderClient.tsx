@@ -19,18 +19,22 @@ function pickLang(obj: LocalizedLabel, locale: string): string {
 }
 
 // ── Share URL helpers ─────────────────────────────────────
-function encodeState(state: AvatarState): string {
+// assetTransform viaja aparte de AvatarState (es un override de sesión, no
+// un campo del estado "oficial") pero se incluye igual en el link para que
+// un ajuste manual de posición sobreviva a compartir/recargar vía ?s=.
+function encodeState(state: AvatarState, assetTransform: Record<string, AssetTransform>): string {
   const compact = {
     c: state.collectionId,
     t: state.tokens,
     s: state.selectedAssets,
     k: state.unlockedKeywords,
     x: state.extraColor,
+    a: assetTransform,
   }
   return btoa(JSON.stringify(compact))
 }
 
-function decodeState(encoded: string): Partial<AvatarState> | null {
+function decodeState(encoded: string): (Partial<AvatarState> & { assetTransform?: Record<string, AssetTransform> }) | null {
   try {
     const d = JSON.parse(atob(encoded))
     return {
@@ -39,6 +43,7 @@ function decodeState(encoded: string): Partial<AvatarState> | null {
       selectedAssets:   d.s,
       unlockedKeywords: d.k ?? [],
       extraColor:       d.x ?? false,
+      assetTransform:   d.a ?? {},
     }
   } catch {
     return null
@@ -213,19 +218,42 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
   // Ruta guiada — null = modo libre; se activa solo si nunca se completó
   const [wizardStep, setWizardStep] = useState<number | null>(null)
 
-  // Ajuste de escala/posición por usuario — solo para cabello frontal con
-  // allowTransform=true (algunas formas de cabeza necesitan un pequeño
-  // ajuste). Es un override de sesión, no se guarda en el servidor.
-  const [hairTransform, setHairTransform] = useState<Record<string, AssetTransform>>({})
+  // Ajuste de escala/posición por usuario — para cualquier asset con
+  // allowTransform=true (algunas piezas necesitan un pequeño ajuste manual
+  // para calzar con el resto). Vive en sesión y se restaura desde
+  // sessionStorage (recargar la pestaña) o desde ?s= (link compartido);
+  // no se guarda como default del asset en el servidor — eso lo maneja el
+  // admin por separado en Studio.
+  const ASSET_TRANSFORM_KEY = 'avatar-os:asset-transform'
+  const [assetTransform, setAssetTransform] = useState<Record<string, AssetTransform>>({})
 
   const canvasAssets = useMemo(
-    () => assets.map(a => hairTransform[a.id] ? { ...a, transform: hairTransform[a.id] } : a),
-    [assets, hairTransform]
+    () => assets.map(a => assetTransform[a.id] ? { ...a, transform: assetTransform[a.id] } : a),
+    [assets, assetTransform]
   )
 
   useEffect(() => {
     if (!localStorage.getItem(WIZARD_DONE_KEY)) setWizardStep(0)
   }, [])
+
+  // Restaura el ajuste manual de posición guardado en esta pestaña (si el
+  // link trae ?s= con su propio ajuste, ese tiene prioridad — ver abajo)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(ASSET_TRANSFORM_KEY)
+      if (saved) setAssetTransform(JSON.parse(saved))
+    } catch { /* sessionStorage no disponible o dato corrupto — ignorar */ }
+  }, [])
+
+  useEffect(() => {
+    try {
+      if (Object.keys(assetTransform).length > 0) {
+        sessionStorage.setItem(ASSET_TRANSFORM_KEY, JSON.stringify(assetTransform))
+      } else {
+        sessionStorage.removeItem(ASSET_TRANSFORM_KEY)
+      }
+    } catch { /* sessionStorage no disponible (modo privado, cuota, etc.) */ }
+  }, [assetTransform])
 
   // Load avatar state from URL ?s= param on first render
   useEffect(() => {
@@ -241,6 +269,9 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
       ...(decoded.unlockedKeywords ? { unlockedKeywords: decoded.unlockedKeywords } : {}),
       extraColor: decoded.extraColor ?? false,
     }))
+    if (decoded.assetTransform && Object.keys(decoded.assetTransform).length > 0) {
+      setAssetTransform(decoded.assetTransform)
+    }
   }, [])
 
   // Tab activo: capas visibles en admin, con al menos un asset (excluyendo hair-front)
@@ -330,7 +361,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     if (!stageRef.current) return
     // exportPNG espera renders en vuelo y fusiona los grupos en un PNG estático
     setExportUrl(await stageRef.current.exportPNG())
-    const encoded = encodeState(state)
+    const encoded = encodeState(state, assetTransform)
     setShareUrl(`${window.location.origin}/${locale}/builder?s=${encoded}`)
   }
 
@@ -499,8 +530,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                         onSkinChange={hex => setToken('skin-color', hex)}
                         onHairColorChange={hex => setToken('hair-color', hex)}
                         onExtraColorChange={(key, hex) => setToken(key, hex)}
-                        hairTransform={hairTransform}
-                        onHairTransform={(id, tr) => setHairTransform(p => ({ ...p, [id]: tr }))}
+                        assetTransform={assetTransform}
+                        onAssetTransform={(id, tr) => setAssetTransform(p => ({ ...p, [id]: tr }))}
                         colorUnlocks={colorUnlocks}
                         masterKeywordIds={masterKeywordIds}
                         locale={locale}
@@ -581,8 +612,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
               onSkinChange={hex => setToken('skin-color', hex)}
               onHairColorChange={hex => setToken('hair-color', hex)}
               onExtraColorChange={(key, hex) => setToken(key, hex)}
-              hairTransform={hairTransform}
-              onHairTransform={(id, tr) => setHairTransform(p => ({ ...p, [id]: tr }))}
+              assetTransform={assetTransform}
+              onAssetTransform={(id, tr) => setAssetTransform(p => ({ ...p, [id]: tr }))}
               colorUnlocks={colorUnlocks}
               masterKeywordIds={masterKeywordIds}
               locale={locale}
@@ -650,14 +681,14 @@ interface LayerPanelProps {
   onSkinChange:        (hex: string) => void
   onHairColorChange:   (hex: string) => void
   onExtraColorChange:  (key: string, hex: string) => void
-  hairTransform:       Record<string, AssetTransform>
-  onHairTransform:     (assetId: string, transform: AssetTransform) => void
+  assetTransform:      Record<string, AssetTransform>
+  onAssetTransform:    (assetId: string, transform: AssetTransform) => void
   colorUnlocks:        ColorUnlock[]
   masterKeywordIds:    string[]
   locale:              string
 }
 
-function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelectHair, onSkinChange, onHairColorChange, onExtraColorChange, hairTransform, onHairTransform, colorUnlocks, masterKeywordIds, locale }: LayerPanelProps) {
+function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelectHair, onSkinChange, onHairColorChange, onExtraColorChange, assetTransform, onAssetTransform, colorUnlocks, masterKeywordIds, locale }: LayerPanelProps) {
   const t = makeT(locale)
   const layer = layers.find(l => l.layerKey === categoryKey)
 
@@ -708,6 +739,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
           onSelect={id => onSelectAsset('head', id)}
           locale={locale}
         />
+        <AssetFitControls layerKey="head" assets={assets} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
       </div>
     )
   }
@@ -748,14 +780,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
             onSelect={handleHairFront}
             locale={locale}
           />
-          {hairFrontId && hairFrontAssets.find(a => a.id === hairFrontId)?.allowTransform && (
-            <HairFitControls
-              asset={hairFrontAssets.find(a => a.id === hairFrontId)!}
-              value={hairTransform[hairFrontId] ?? hairFrontAssets.find(a => a.id === hairFrontId)!.transform}
-              onChange={tr => onHairTransform(hairFrontId, tr)}
-              locale={locale}
-            />
-          )}
+          <AssetFitControls layerKey="hair-front" assets={assets} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
         </div>
 
         {/* COLOR */}
@@ -805,6 +830,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
               locale={locale}
             />
           </div>
+          <AssetFitControls layerKey="hair-back" assets={assets} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
         </div>
 
       </div>
@@ -823,6 +849,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
           onSelect={id => onSelectAsset(categoryKey, id)}
           locale={locale}
         />
+        <AssetFitControls layerKey={categoryKey} assets={assets} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
         {activeUnlocks.map(unlock => {
           const tokenKey = `unlock:${unlock.targetLayerKey}:${unlock.targetRole}`
           return (
@@ -867,13 +894,40 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
     )
   }
 
-  // ── OTRAS CAPAS: solo grid de assets ──────────────────
+  // ── OTRAS CAPAS: grid de assets + ajuste si el asset elegido lo permite ──
   return (
-    <AssetGrid
-      assets={layerAssets}
-      selectedId={selectedId}
-      optional={layer?.optional ?? false}
-      onSelect={id => onSelectAsset(categoryKey, id)}
+    <div className="space-y-5">
+      <AssetGrid
+        assets={layerAssets}
+        selectedId={selectedId}
+        optional={layer?.optional ?? false}
+        onSelect={id => onSelectAsset(categoryKey, id)}
+        locale={locale}
+      />
+      <AssetFitControls layerKey={categoryKey} assets={assets} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
+    </div>
+  )
+}
+
+// Muestra los controles de escala/posición solo si el asset SELECCIONADO en
+// esta capa tiene allowTransform=true — reutilizable en cualquier categoría,
+// no solo cabello, para no requerir una excepción de UI por cada asset.
+function AssetFitControls({ layerKey, assets, state, assetTransform, onAssetTransform, locale }: {
+  layerKey:         string
+  assets:           Asset[]
+  state:            AvatarState
+  assetTransform:   Record<string, AssetTransform>
+  onAssetTransform: (assetId: string, transform: AssetTransform) => void
+  locale:           string
+}) {
+  const selectedId = state.selectedAssets[layerKey] ?? null
+  const asset = selectedId ? assets.find(a => a.id === selectedId) : undefined
+  if (!asset?.allowTransform) return null
+  return (
+    <HairFitControls
+      asset={asset}
+      value={assetTransform[asset.id] ?? asset.transform}
+      onChange={tr => onAssetTransform(asset.id, tr)}
       locale={locale}
     />
   )

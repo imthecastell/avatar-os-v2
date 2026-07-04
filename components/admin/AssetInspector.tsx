@@ -453,15 +453,14 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
             </div>
           )}
 
-          {/* Allow builder-side transform (solo cabello frontal) */}
-          {asset.layerKey === 'hair-front' && (
-            <Toggle
-              label="Permitir ajuste en el builder"
-              hint="Muestra escala/posición al usuario público cuando elige este cabello — útil si no encaja bien con ciertas formas de cabeza"
-              value={allowTransform}
-              onChange={setAllowTransform}
-            />
-          )}
+          {/* Permitir ajuste en el builder — disponible para cualquier asset,
+              no solo cabello, para no tener que crear excepciones una por una */}
+          <Toggle
+            label="Permitir ajuste en el builder"
+            hint="Muestra escala/posición al usuario público cuando elige este asset — útil si no encaja bien con los demás elementos"
+            value={allowTransform}
+            onChange={setAllowTransform}
+          />
 
           {/* Transform */}
           <div>
