@@ -1,28 +1,44 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ConfettiBurst from '@/components/builder/ConfettiBurst'
+import { renderFramedShare } from '@/lib/engine/share-frame'
 
 interface Props {
   dataUrl:   string
   shareUrl?: string
+  title?:    string   // texto superior de la placa (ej. nombre de la colección)
+  subtitle?: string   // texto inferior de la placa
   onClose:   () => void
 }
 
-export default function ExportModal({ dataUrl, shareUrl, onClose }: Props) {
+export default function ExportModal({ dataUrl, shareUrl, title = 'Avatar OS', subtitle = 'Original', onClose }: Props) {
   const linkRef              = useRef<HTMLAnchorElement>(null)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied]  = useState(false)
+  const [framedUrl, setFramedUrl] = useState<string | null>(null)
+
+  // La versión enmarcada tarda un frame en componerse (carga la imagen en
+  // un <img> interno) — mientras tanto se muestra el PNG plano de respaldo.
+  useEffect(() => {
+    let cancelled = false
+    renderFramedShare(dataUrl, { title, subtitle }).then(url => {
+      if (!cancelled) setFramedUrl(url)
+    })
+    return () => { cancelled = true }
+  }, [dataUrl, title, subtitle])
+
+  const shareImageUrl = framedUrl ?? dataUrl
 
   function handleDownload() {
     const link      = linkRef.current!
-    link.href       = dataUrl
+    link.href       = shareImageUrl
     link.download   = `avatar-${Date.now()}.png`
     link.click()
   }
 
   async function handleShare() {
     if (!navigator.share) { handleDownload(); return }
-    const blob = await (await fetch(dataUrl)).blob()
+    const blob = await (await fetch(shareImageUrl)).blob()
     const file = new File([blob], 'avatar.png', { type: 'image/png' })
     await navigator.share({ title: 'Mi Avatar', files: [file] })
   }
@@ -42,11 +58,11 @@ export default function ExportModal({ dataUrl, shareUrl, onClose }: Props) {
     >
       <div
         className="relative w-full max-w-xs rounded-3xl overflow-hidden flex flex-col fx-modal-in"
-        style={{ background: '#111120', border: '1px solid rgba(255,255,255,0.08)' }}
+        style={{ background: '#111120', border: '1px solid rgba(255,255,255,0.08)', maxHeight: '92vh' }}
       >
         <ConfettiBurst count={28} />
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0">
           <div>
             <p className="text-sm font-semibold text-white">Tu Avatar está listo ✦</p>
             <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>Cada pieza es única, como tú.</p>
@@ -58,17 +74,21 @@ export default function ExportModal({ dataUrl, shareUrl, onClose }: Props) {
           >✕</button>
         </div>
 
-        {/* Preview */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={dataUrl}
-          alt="Avatar preview"
-          className="w-full aspect-square object-contain"
-          style={{ background: 'rgba(255,255,255,0.03)' }}
-        />
+        {/* Preview — con scroll propio: la versión enmarcada es 9:16 y en
+            pantallas bajas (ej. iPhone SE) no siempre cabe entera junto con
+            los botones de abajo */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={shareImageUrl}
+            alt="Avatar preview"
+            className="w-full object-contain"
+            style={{ aspectRatio: framedUrl ? '9/16' : '1/1', background: 'rgba(255,255,255,0.03)' }}
+          />
+        </div>
 
         {/* Actions */}
-        <div className="p-4 space-y-2">
+        <div className="p-4 space-y-2 shrink-0">
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={handleDownload}
