@@ -12,9 +12,8 @@ interface Props {
   onClose:   () => void
 }
 
-export default function ExportModal({ dataUrl, shareUrl, title = 'Avatar OS', subtitle = 'Original', onClose }: Props) {
-  const linkRef              = useRef<HTMLAnchorElement>(null)
-  const [copied, setCopied]  = useState(false)
+export default function ExportModal({ dataUrl, title = 'Avatar OS', subtitle = 'Original', onClose }: Props) {
+  const linkRef                   = useRef<HTMLAnchorElement>(null)
   const [framedUrl, setFramedUrl] = useState<string | null>(null)
 
   // La versión enmarcada tarda un frame en componerse (carga la imagen en
@@ -29,25 +28,21 @@ export default function ExportModal({ dataUrl, shareUrl, title = 'Avatar OS', su
 
   const shareImageUrl = framedUrl ?? dataUrl
 
-  function handleDownload() {
-    const link      = linkRef.current!
-    link.href       = shareImageUrl
-    link.download   = `avatar-${Date.now()}.png`
+  function downloadUrl(url: string, filename: string) {
+    const link    = linkRef.current!
+    link.href     = url
+    link.download = filename
     link.click()
   }
 
+  function handleDownloadSocial() { downloadUrl(shareImageUrl, `avatar-social-${Date.now()}.png`) }
+  function handleDownloadPfp()    { downloadUrl(dataUrl,       `avatar-pfp-${Date.now()}.png`) }
+
   async function handleShare() {
-    if (!navigator.share) { handleDownload(); return }
+    if (!navigator.share) { handleDownloadSocial(); return }
     const blob = await (await fetch(shareImageUrl)).blob()
     const file = new File([blob], 'avatar.png', { type: 'image/png' })
     await navigator.share({ title: 'Mi Avatar', files: [file] })
-  }
-
-  async function handleCopyLink() {
-    if (!shareUrl) return
-    await navigator.clipboard.writeText(shareUrl)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
   }
 
   return (
@@ -91,36 +86,28 @@ export default function ExportModal({ dataUrl, shareUrl, title = 'Avatar OS', su
         <div className="p-4 space-y-2 shrink-0">
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={handleDownload}
+              onClick={handleDownloadSocial}
               className="text-sm font-semibold py-2.5 rounded-xl transition-all"
               style={{ background: 'linear-gradient(135deg,#6d28d9,#9333ea)', color: 'white' }}
             >
-              Descargar PNG
+              Descargar para redes
             </button>
-            {typeof navigator !== 'undefined' && 'share' in navigator ? (
-              <button
-                onClick={handleShare}
-                className="text-sm font-medium py-2.5 rounded-xl transition-all"
-                style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)' }}
-              >
-                Compartir
-              </button>
-            ) : (
-              <div />
-            )}
+            <button
+              onClick={handleDownloadPfp}
+              className="text-sm font-medium py-2.5 rounded-xl transition-all"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)' }}
+            >
+              Descargar PFP
+            </button>
           </div>
 
-          {shareUrl && (
+          {typeof navigator !== 'undefined' && 'share' in navigator && (
             <button
-              onClick={handleCopyLink}
-              className="w-full text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-2"
-              style={{
-                background: copied ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.05)',
-                color: copied ? '#6ee7b7' : 'rgba(255,255,255,0.45)',
-                border: `1px solid ${copied ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.07)'}`,
-              }}
+              onClick={handleShare}
+              className="w-full text-sm font-medium py-2.5 rounded-xl transition-all"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)' }}
             >
-              {copied ? '✓ Link copiado' : '🔗 Copiar link del avatar'}
+              Compartir
             </button>
           )}
         </div>
