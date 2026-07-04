@@ -648,18 +648,10 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
 
   const selectedId = state.selectedAssets[categoryKey] ?? null
 
-  // ── CABEZA: estilos + tonos de piel ──────────────────
+  // ── CABEZA: tonos de piel primero, luego la forma ─────
   if (categoryKey === 'head') {
     return (
       <div className="space-y-5">
-        <AssetGrid
-          assets={layerAssets}
-          selectedId={selectedId}
-          optional={layer?.optional ?? false}
-          onSelect={id => onSelectAsset('head', id)}
-          locale={locale}
-        />
-
         <div>
           <Divider label={t('skinTone')} />
           <div className="flex flex-wrap gap-2.5 mt-3">
@@ -690,6 +682,14 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
             {t('fantasyHint')}
           </p>
         </div>
+
+        <AssetGrid
+          assets={layerAssets}
+          selectedId={selectedId}
+          optional={layer?.optional ?? false}
+          onSelect={id => onSelectAsset('head', id)}
+          locale={locale}
+        />
       </div>
     )
   }
