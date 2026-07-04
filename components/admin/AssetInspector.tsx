@@ -32,7 +32,12 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
   const [isDefault,      setIsDefault]      = useState(asset.isDefault)
   const [suggestedColor, setSuggestedColor] = useState<string>(asset.suggestedColor ?? '')
   const [maskAssetId,    setMaskAssetId]    = useState<string>(asset.maskAssetId ?? '')
-  const [allowTransform, setAllowTransform] = useState(asset.allowTransform)
+  const currentLayer = layers.find(l => l.layerKey === asset.layerKey)
+  // Tri-estado: heredar el default de la capa, o anularlo explícitamente
+  // para este asset puntual.
+  const [transformOverride, setTransformOverride] = useState<'inherit' | 'on' | 'off'>(
+    asset.allowTransform === null ? 'inherit' : asset.allowTransform ? 'on' : 'off'
+  )
   const [transform,      setTransform]      = useState<AssetTransform>(
     asset.transform ?? { scale: 1, offsetX: 0, offsetY: 0 }
   )
@@ -59,7 +64,12 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
   const ownRoleOptions: [string, string][] = asset.colorMap.length > 0
     ? Array.from(new Map(asset.colorMap.map(c => [c.role, c.label || c.role])).entries())
     : ROLE_OPTIONS.map(r => [r.value, r.label] as [string, string])
-  const [ownColorOn,     setOwnColorOn]     = useState(ownColorRules.length > 0)
+  // Tri-estado: heredar el default de color de la capa, desactivarlo para
+  // este asset puntual, o darle una configuración propia (con o sin
+  // palabras clave que la gatillen).
+  const [colorOverride, setColorOverride] = useState<'inherit' | 'disabled' | 'custom'>(
+    ownColorRules.length > 0 ? 'custom' : asset.colorDisabled ? 'disabled' : 'inherit'
+  )
   const [ownKeywordIds,  setOwnKeywordIds]  = useState<string[]>(
     ownColorRules.map(u => u.keywordId).filter((id): id is string => !!id)
   )
@@ -83,7 +93,8 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
       is_default:     isDefault,
       suggested_color: suggestedColor || null,
       mask_asset_id:  maskAssetId  || null,
-      allow_transform: allowTransform,
+      allow_transform: transformOverride === 'inherit' ? null : transformOverride === 'on',
+      color_disabled:  colorOverride === 'disabled',
       transform,
     }
 
@@ -140,7 +151,7 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
     if (ownColorRules.length > 0) {
       await Promise.all(ownColorRules.map(u => fetch(`/api/color-unlocks?id=${u.id}`, { method: 'DELETE' })))
     }
-    if (ownColorOn) {
+    if (colorOverride === 'custom') {
       // Sin ninguna palabra clave marcada, el color queda siempre disponible
       // (ej. mostacho: no necesita gatillo, solo mostrar las muestras).
       const kwList: (string | null)[] = ownKeywordIds.length > 0 ? ownKeywordIds : [null]
@@ -372,13 +383,24 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
               por defecto, pero con "discord" u otras claves habilita muestras) */}
           {asset.colorMap.length > 0 && (
             <div>
-              <Toggle
-                label="Muestras de color para este asset"
-                hint="Ej. Lentes negros por defecto — marca palabras clave para exigir alguna (con una sola basta), o deja ninguna marcada para que el color esté siempre disponible (ej. mostacho)"
-                value={ownColorOn}
-                onChange={setOwnColorOn}
+              <Label
+                text="Color de este asset"
+                hint={
+                  currentLayer?.colorEditable
+                    ? `La capa "${currentLayer.labelEs}" ya permite color por defecto — "Heredar" usa esa configuración`
+                    : `La capa "${currentLayer?.labelEs ?? asset.layerKey}" NO permite color por defecto — "Heredar" no mostrará nada`
+                }
               />
-              {ownColorOn && (
+              <Segmented
+                value={colorOverride}
+                onChange={setColorOverride}
+                options={[
+                  { value: 'inherit',  label: 'Heredar de la capa' },
+                  { value: 'disabled', label: 'Desactivar' },
+                  { value: 'custom',   label: 'Personalizar' },
+                ]}
+              />
+              {colorOverride === 'custom' && (
                 <div className="mt-3 p-3 rounded-xl space-y-2.5" style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.15)' }}>
                   <div>
                     <p className="text-[10px] mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
@@ -453,14 +475,27 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
             </div>
           )}
 
-          {/* Permitir ajuste en el builder — disponible para cualquier asset,
-              no solo cabello, para no tener que crear excepciones una por una */}
-          <Toggle
-            label="Permitir ajuste en el builder"
-            hint="Muestra escala/posición al usuario público cuando elige este asset — útil si no encaja bien con los demás elementos"
-            value={allowTransform}
-            onChange={setAllowTransform}
-          />
+          {/* Ajuste en el builder — disponible para cualquier asset, no solo
+              cabello, para no tener que crear excepciones una por una */}
+          <div>
+            <Label
+              text="Ajuste de posición en el builder"
+              hint={
+                currentLayer?.positionEditable
+                  ? `La capa "${currentLayer.labelEs}" ya permite ajuste por defecto — "Heredar" usa esa configuración`
+                  : `La capa "${currentLayer?.labelEs ?? asset.layerKey}" NO permite ajuste por defecto — "Heredar" no mostrará el control`
+              }
+            />
+            <Segmented
+              value={transformOverride}
+              onChange={setTransformOverride}
+              options={[
+                { value: 'inherit', label: 'Heredar de la capa' },
+                { value: 'on',      label: 'Sí' },
+                { value: 'off',     label: 'No' },
+              ]}
+            />
+          </div>
 
           {/* Transform */}
           <div>
@@ -521,6 +556,33 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
 }
 
 // ── Sub-components ────────────────────────────────────────
+// Control de 3 (o más) opciones mutuamente excluyentes — usado para los
+// tri-estados "heredar de la capa / activar / desactivar".
+function Segmented<T extends string>({ value, onChange, options }: {
+  value: T
+  onChange: (v: T) => void
+  options: { value: T; label: string }[]
+}) {
+  return (
+    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+      {options.map(opt => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className="text-[10px] font-semibold px-2.5 py-1.5 rounded-lg transition-all"
+          style={{
+            background: value === opt.value ? 'rgba(124,58,237,0.6)' : 'rgba(255,255,255,0.05)',
+            color: value === opt.value ? 'white' : 'rgba(255,255,255,0.4)',
+          }}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function Toggle({ label, hint, value, onChange }: { label: string; hint?: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
     <div className="flex items-center justify-between gap-3">

@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import Image from 'next/image'
 import type { Layer, Asset, Collection } from '@/types'
+import LayerRulesModal from '@/components/admin/LayerRulesModal'
 
 interface Props {
   collections: Collection[]
@@ -30,6 +31,7 @@ export default function LayerSandwich({ collections, layers: initialLayers, asse
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [editingAsset, setEditingAsset] = useState<string | null>(null)
+  const [editingLayer, setEditingLayer] = useState<string | null>(null)
 
   // ── Drag & drop ──────────────────────────────────────
   function handleDragStart(i: number) {
@@ -57,6 +59,20 @@ export default function LayerSandwich({ collections, layers: initialLayers, asse
       })
     }
     setSaving(false)
+  }
+
+  // ── Toggle: capa opcional u obligatoria en el builder público ──
+  async function toggleOptional(layerId: string, optional: boolean) {
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, optional } : l))
+    const res = await fetch('/api/layers', {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ id: layerId, optional }),
+    })
+    if (!res.ok) {
+      setLayers(prev => prev.map(l => l.id === layerId ? { ...l, optional: !optional } : l))
+      alert('No se pudo guardar el cambio')
+    }
   }
 
   // ── Set default asset ─────────────────────────────────
@@ -159,6 +175,28 @@ export default function LayerSandwich({ collections, layers: initialLayers, asse
                 </span>
               )}
 
+              {/* Opcional / obligatoria en el builder público */}
+              <label
+                className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none shrink-0"
+                onClick={e => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={layer.optional}
+                  onChange={e => toggleOptional(layer.id, e.target.checked)}
+                  className="accent-violet-500 w-3.5 h-3.5"
+                />
+                {layer.optional ? 'Opcional' : 'Obligatoria'}
+              </label>
+
+              {/* Editar reglas de la capa (color/posición por defecto) */}
+              <button
+                onClick={e => { e.stopPropagation(); setEditingLayer(layer.layerKey) }}
+                className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded-lg shrink-0"
+              >
+                ⚙ Reglas
+              </button>
+
               {/* Asset count */}
               <span className="text-xs text-gray-500 w-16 text-right">
                 {layerAssets.length} asset{layerAssets.length !== 1 ? 's' : ''}
@@ -246,6 +284,19 @@ export default function LayerSandwich({ collections, layers: initialLayers, asse
           </div>
         )
       })}
+
+      {editingLayer && (() => {
+        const layer = layers.find(l => l.layerKey === editingLayer)
+        if (!layer) return null
+        return (
+          <LayerRulesModal
+            layer={layer}
+            assets={assets}
+            onClose={() => setEditingLayer(null)}
+            onSaved={updated => setLayers(prev => prev.map(l => l.id === updated.id ? updated : l))}
+          />
+        )
+      })()}
     </div>
   )
 }

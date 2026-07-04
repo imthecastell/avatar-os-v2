@@ -158,24 +158,7 @@ function isAssetUnlocked(asset: Asset, state: AvatarState, masterKeywordIds: str
 // desbloqueada (o el usuario tiene alguna keyword master) Y, si la regla
 // exige un asset específico seleccionado (ej. una chaqueta abierta),
 // ese asset es el que está activo en su propia capa.
-function getActiveColorUnlocks(
-  colorUnlocks: ColorUnlock[], state: AvatarState, masterKeywordIds: string[], assets: Asset[], layerKey: string
-): ColorUnlock[] {
-  const hasMaster = state.unlockedKeywords.some(id => masterKeywordIds.includes(id))
-  const matches = colorUnlocks.filter(u => {
-    if (u.targetLayerKey !== layerKey) return false
-    // targetAssetId: la regla solo aplica si ESTE asset específico está
-    // seleccionado en la capa (ej. "Lentes" tiene color desbloqueable, otro
-    // accesorio de la misma capa no).
-    if (u.targetAssetId && state.selectedAssets[layerKey] !== u.targetAssetId) return false
-    if (u.keywordId && !hasMaster && !state.unlockedKeywords.includes(u.keywordId)) return false
-    if (u.scopeAssetId) {
-      const scopeAsset = assets.find(a => a.id === u.scopeAssetId)
-      if (!scopeAsset || state.selectedAssets[scopeAsset.layerKey] !== u.scopeAssetId) return false
-    }
-    return true
-  })
-
+function dedupUnlocks(matches: ColorUnlock[]): ColorUnlock[] {
   // Varias palabras clave pueden desbloquear la MISMA función de color (ej.
   // "Lentes" con 3-4 palabras válidas) — cada una crea su propia fila, pero
   // si más de una está activa a la vez deben mostrarse como un solo control,
@@ -187,6 +170,58 @@ function getActiveColorUnlocks(
     seen.add(sig)
     return true
   })
+}
+
+function getActiveColorUnlocks(
+  colorUnlocks: ColorUnlock[], state: AvatarState, masterKeywordIds: string[], assets: Asset[], layers: Layer[], layerKey: string
+): ColorUnlock[] {
+  const hasMaster = state.unlockedKeywords.some(id => masterKeywordIds.includes(id))
+  const relevant = colorUnlocks.filter(u => u.targetLayerKey === layerKey)
+  const selectedId = state.selectedAssets[layerKey] ?? null
+  const selectedAsset = selectedId ? assets.find(a => a.id === selectedId) ?? null : null
+
+  // Reglas propias del asset seleccionado (target_asset_id) — si existen,
+  // mandan por completo sobre el default de la capa, estén o no
+  // actualmente desbloqueadas por palabra clave (si el admin las configuró
+  // con keyword, es porque NO quiere que el default libre las reemplace).
+  const ownRules = selectedAsset ? relevant.filter(u => u.targetAssetId === selectedAsset.id) : []
+  if (ownRules.length > 0) {
+    const matches = ownRules.filter(u => !u.keywordId || hasMaster || state.unlockedKeywords.includes(u.keywordId))
+    return dedupUnlocks(matches)
+  }
+
+  // Reglas cruzadas entre capas (scopeAssetId, sin targetAssetId) — igual que antes.
+  const scopeRules = relevant.filter(u => !u.targetAssetId).filter(u => {
+    if (u.keywordId && !hasMaster && !state.unlockedKeywords.includes(u.keywordId)) return false
+    if (u.scopeAssetId) {
+      const scopeAsset = assets.find(a => a.id === u.scopeAssetId)
+      if (!scopeAsset || state.selectedAssets[scopeAsset.layerKey] !== u.scopeAssetId) return false
+    }
+    return true
+  })
+  if (scopeRules.length > 0) return dedupUnlocks(scopeRules)
+
+  // Sin overrides — se hereda el default de la capa, salvo que el asset lo
+  // haya desactivado puntualmente (colorDisabled).
+  const layer = layers.find(l => l.layerKey === layerKey)
+  if (layer?.colorEditable && selectedAsset && !selectedAsset.colorDisabled && layer.colorTargetRole) {
+    const hasRole = selectedAsset.colorMap.some(c => c.role === layer.colorTargetRole)
+    if (hasRole) {
+      const base = {
+        collectionId: layer.collectionId, keywordId: null, scopeAssetId: null,
+        targetLayerKey: layerKey, targetAssetId: null, targetRole: layer.colorTargetRole,
+        swatches: layer.colorSwatches,
+      }
+      if (layer.colorMode === 'both') {
+        return [
+          { ...base, id: `layer-default:${layer.id}:swatches`, mode: 'swatches' as const },
+          { ...base, id: `layer-default:${layer.id}:wheel`,    mode: 'wheel'    as const },
+        ]
+      }
+      return [{ ...base, id: `layer-default:${layer.id}`, mode: layer.colorMode === 'wheel' ? 'wheel' as const : 'swatches' as const }]
+    }
+  }
+  return []
 }
 
 // ── Component ─────────────────────────────────────────────
@@ -739,7 +774,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
           onSelect={id => onSelectAsset('head', id)}
           locale={locale}
         />
-        <AssetFitControls layerKey="head" assets={assets} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
+        <AssetFitControls layerKey="head" assets={assets} layers={layers} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
       </div>
     )
   }
@@ -780,7 +815,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
             onSelect={handleHairFront}
             locale={locale}
           />
-          <AssetFitControls layerKey="hair-front" assets={assets} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
+          <AssetFitControls layerKey="hair-front" assets={assets} layers={layers} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
         </div>
 
         {/* COLOR */}
@@ -830,7 +865,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
               locale={locale}
             />
           </div>
-          <AssetFitControls layerKey="hair-back" assets={assets} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
+          <AssetFitControls layerKey="hair-back" assets={assets} layers={layers} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
         </div>
 
       </div>
@@ -838,7 +873,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
   }
 
   // ── CAPAS CON COLOR DESBLOQUEABLE (color_unlocks) ─────
-  const activeUnlocks = getActiveColorUnlocks(colorUnlocks, state, masterKeywordIds, assets, categoryKey)
+  const activeUnlocks = getActiveColorUnlocks(colorUnlocks, state, masterKeywordIds, assets, layers, categoryKey)
   if (activeUnlocks.length > 0) {
     return (
       <div className="space-y-5">
@@ -849,7 +884,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
           onSelect={id => onSelectAsset(categoryKey, id)}
           locale={locale}
         />
-        <AssetFitControls layerKey={categoryKey} assets={assets} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
+        <AssetFitControls layerKey={categoryKey} assets={assets} layers={layers} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
         {activeUnlocks.map(unlock => {
           const tokenKey = `unlock:${unlock.targetLayerKey}:${unlock.targetRole}`
           return (
@@ -904,17 +939,20 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
         onSelect={id => onSelectAsset(categoryKey, id)}
         locale={locale}
       />
-      <AssetFitControls layerKey={categoryKey} assets={assets} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
+      <AssetFitControls layerKey={categoryKey} assets={assets} layers={layers} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
     </div>
   )
 }
 
-// Muestra los controles de escala/posición solo si el asset SELECCIONADO en
-// esta capa tiene allowTransform=true — reutilizable en cualquier categoría,
-// no solo cabello, para no requerir una excepción de UI por cada asset.
-function AssetFitControls({ layerKey, assets, state, assetTransform, onAssetTransform, locale }: {
+// Muestra los controles de escala/posición si el asset SELECCIONADO en esta
+// capa lo permite — explícitamente (allowTransform=true) o heredado del
+// default de su capa (layer.positionEditable) cuando el asset no lo anula
+// (allowTransform=null). Reutilizable en cualquier categoría, no solo
+// cabello, para no requerir una excepción de UI por cada asset.
+function AssetFitControls({ layerKey, assets, layers, state, assetTransform, onAssetTransform, locale }: {
   layerKey:         string
   assets:           Asset[]
+  layers:           Layer[]
   state:            AvatarState
   assetTransform:   Record<string, AssetTransform>
   onAssetTransform: (assetId: string, transform: AssetTransform) => void
@@ -922,7 +960,10 @@ function AssetFitControls({ layerKey, assets, state, assetTransform, onAssetTran
 }) {
   const selectedId = state.selectedAssets[layerKey] ?? null
   const asset = selectedId ? assets.find(a => a.id === selectedId) : undefined
-  if (!asset?.allowTransform) return null
+  if (!asset) return null
+  const layer = layers.find(l => l.layerKey === layerKey)
+  const allowed = asset.allowTransform ?? layer?.positionEditable ?? false
+  if (!allowed) return null
   return (
     <HairFitControls
       asset={asset}

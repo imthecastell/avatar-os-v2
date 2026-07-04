@@ -21,6 +21,13 @@ export interface Layer {
   pairedWith:       string | null
   visibleInBuilder: boolean
   opacity:          number   // 0.0 – 1.0, default 1
+  // Regla de capa: default de edición para TODOS los assets de esta capa,
+  // salvo que un asset puntual la anule (ver Asset.allowTransform / colorDisabled).
+  positionEditable: boolean
+  colorEditable:    boolean
+  colorTargetRole:  string | null           // región del colorMap que se vuelve editable (ej. "skin")
+  colorMode:        'swatches' | 'wheel' | 'both'
+  colorSwatches:    string[] | null
 }
 
 export interface AssetTransform {
@@ -48,7 +55,12 @@ export interface Asset {
   transform:      AssetTransform
   suggestedColor: string | null   // color hex sugerido al activar (ej. color del cabello)
   maskAssetId:    string | null   // asset de máscara a auto-aplicar cuando este está activo
-  allowTransform: boolean         // permite al usuario ajustar escala/posición en el builder público (solo cabello frontal)
+  // Tri-estado: null = heredar el default de la capa (layer.positionEditable),
+  // true/false = anular explícitamente para este asset puntual.
+  allowTransform: boolean | null
+  // Anula el default de color de la capa (layer.colorEditable) para este
+  // asset puntual, incluso si la capa permite editar color por defecto.
+  colorDisabled:  boolean
 }
 
 export interface ColorEntry {

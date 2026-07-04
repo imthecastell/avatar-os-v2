@@ -20,7 +20,8 @@ export function mapAsset(r: Record<string, unknown>): Asset {
     transform:      (r.transform as { scale: number; offsetX: number; offsetY: number }) ?? { scale: 1, offsetX: 0, offsetY: 0 },
     suggestedColor: r.suggested_color as string | null,
     maskAssetId:    r.mask_asset_id as string | null,
-    allowTransform: (r.allow_transform as boolean) ?? false,
+    allowTransform: r.allow_transform === null || r.allow_transform === undefined ? null : Boolean(r.allow_transform),
+    colorDisabled:  (r.color_disabled as boolean) ?? false,
   }
 }
 
@@ -40,6 +41,11 @@ export function mapLayer(r: Record<string, unknown>): Layer {
     pairedWith:       r.paired_with as string | null,
     visibleInBuilder: (r.visible_in_builder as boolean) ?? true,
     opacity:          (r.opacity as number) ?? 1,
+    positionEditable: (r.position_editable as boolean) ?? false,
+    colorEditable:    (r.color_editable as boolean) ?? false,
+    colorTargetRole:  (r.color_target_role as string | null) ?? null,
+    colorMode:        (r.color_mode as 'swatches' | 'wheel' | 'both') ?? 'swatches',
+    colorSwatches:    (r.color_swatches as string[] | null) ?? null,
   }
 }
 
