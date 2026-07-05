@@ -967,10 +967,19 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
         <AssetFitControls layerKey={categoryKey} assets={assets} layers={layers} state={state} assetTransform={assetTransform} onAssetTransform={onAssetTransform} locale={locale} />
         {activeUnlocks.map(unlock => {
           const tokenKey = `unlock:${unlock.targetLayerKey}:${unlock.targetRole}`
+          // Cuando hay varias regiones de color activas a la vez para el
+          // mismo asset (ej. "Marco" + "Lente" en unos lentes), se usa la
+          // etiqueta detectada de esa región en vez del genérico "Color"
+          // para poder distinguirlas.
+          const selectedAsset = selectedId ? assets.find(a => a.id === selectedId) : undefined
+          const roleLabel = selectedAsset?.colorMap.find(c => c.role === unlock.targetRole)?.label
+          const label = activeUnlocks.length > 1 && roleLabel ? roleLabel : t('color')
+          const showSwatches = unlock.mode === 'swatches' || unlock.mode === 'both'
+          const showWheel    = unlock.mode === 'wheel' || unlock.mode === 'both'
           return (
             <div key={unlock.id}>
-              <Divider label={t('color')} />
-              {unlock.mode === 'swatches' ? (
+              <Divider label={label} />
+              {showSwatches && (
                 <div className="flex flex-wrap gap-2 mt-3">
                   {(unlock.swatches ?? []).map(hex => {
                     const active = state.tokens[tokenKey] === hex
@@ -989,7 +998,8 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
                     )
                   })}
                 </div>
-              ) : (
+              )}
+              {showWheel && (
                 <div className="flex items-center gap-3 mt-3">
                   <input
                     type="color"

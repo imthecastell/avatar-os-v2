@@ -115,7 +115,7 @@ const AvatarStage = forwardRef<AvatarStageHandle, Props>(function AvatarStage(
         <div
           className="absolute fx-blink pointer-events-none"
           style={{
-            top: '36%', left: '30%', width: '40%', height: '6%',
+            top: '40%', left: '28%', width: '44%', height: '10%',
             background: state.tokens['skin-color'] ?? '#C68642',
             transformOrigin: 'center',
           }}

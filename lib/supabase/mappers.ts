@@ -92,7 +92,7 @@ export function mapColorUnlock(r: Record<string, unknown>): ColorUnlock {
     targetLayerKey: r.target_layer_key as string,
     targetAssetId:  (r.target_asset_id as string | null) ?? null,
     targetRole:     r.target_role as string,
-    mode:           (r.mode as 'wheel' | 'swatches') ?? 'wheel',
+    mode:           (r.mode as 'wheel' | 'swatches' | 'both') ?? 'wheel',
     swatches:       (r.swatches as string[]) ?? null,
   }
 }

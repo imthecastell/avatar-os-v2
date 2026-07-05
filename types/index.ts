@@ -136,7 +136,7 @@ export interface ColorUnlock {
   targetLayerKey:  string          // capa cuyo color se vuelve editable
   targetAssetId:   string | null   // si se define, solo aplica cuando ESTE asset (no cualquiera de la capa) está seleccionado
   targetRole:      string          // región del colorMap (skin/primary/secondary…)
-  mode:            'wheel' | 'swatches'
+  mode:            'wheel' | 'swatches' | 'both'
   swatches:        string[] | null
 }
 

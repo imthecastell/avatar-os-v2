@@ -51,7 +51,7 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
   const [colorRuleOn,     setColorRuleOn]     = useState(!!existingRule)
   const [ruleTargetLayer, setRuleTargetLayer] = useState(existingRule?.targetLayerKey ?? recolorableLayers[0]?.layerKey ?? '')
   const [ruleTargetRole,  setRuleTargetRole]  = useState(existingRule?.targetRole ?? 'skin')
-  const [ruleMode,        setRuleMode]        = useState<'wheel' | 'swatches'>(existingRule?.mode ?? 'wheel')
+  const [ruleMode,        setRuleMode]        = useState<'wheel' | 'swatches'>(existingRule?.mode === 'swatches' ? 'swatches' : 'wheel')
   const [ruleSwatches,    setRuleSwatches]    = useState<string[]>(existingRule?.swatches ?? ['#ffffff', '#000000', '#ff0000'])
 
   // Color propio desbloqueable por palabra clave (ej. lentes negros por defecto,
