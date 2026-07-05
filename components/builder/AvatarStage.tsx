@@ -108,14 +108,26 @@ const AvatarStage = forwardRef<AvatarStageHandle, Props>(function AvatarStage(
       <div className="absolute inset-0 fx-float">
         <AvatarCanvas state={state} layers={groups.chars} assets={assets} size={size} onCompositorReady={onReady('chars')} />
 
-        {/* Parpadeo — franja del tono de piel actual sobre la zona de los ojos,
-            aparece y desaparece con fx-blink. Solo vive en la vista previa en
-            vivo (este div no forma parte de ningún canvas, así que nunca
-            aparece en el PNG exportado). */}
+        {/* Parpadeo — dos óvalos (uno por ojo, no una franja) del tono de piel
+            actual, calibrados sobre el grupo "Expression" real del SVG de
+            cabeza (medido por posición de píxel en las 6 formas de cabeza:
+            ambos ojos caen siempre en la misma banda). Aparecen y desaparecen
+            con fx-blink. Solo viven en la vista previa — no forman parte de
+            ningún canvas, así que nunca aparecen en el PNG exportado. */}
         <div
           className="absolute fx-blink pointer-events-none"
           style={{
-            top: '40%', left: '28%', width: '44%', height: '10%',
+            top: '40%', left: '38.8%', width: '8%', height: '11%',
+            borderRadius: '50%',
+            background: state.tokens['skin-color'] ?? '#C68642',
+            transformOrigin: 'center',
+          }}
+        />
+        <div
+          className="absolute fx-blink pointer-events-none"
+          style={{
+            top: '40%', left: '53.2%', width: '8%', height: '11%',
+            borderRadius: '50%',
             background: state.tokens['skin-color'] ?? '#C68642',
             transformOrigin: 'center',
           }}
