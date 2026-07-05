@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
-import type { AvatarState, Layer, Asset, AssetTransform, LayerException, LayerDefault, Collection, SiteSettings, ColorUnlock } from '@/types'
+import type { AvatarState, Layer, Asset, AssetTransform, LayerException, LayerDefault, Collection, SiteSettings, ColorUnlock, ColorPalette } from '@/types'
 import { pickThumb } from '@/lib/thumb'
 import { makeT, LOCALE_META, type Locale } from '@/lib/i18n/dict'
 import ExportModal from '@/components/builder/ExportModal'
@@ -74,8 +74,9 @@ const LAYER_META: Record<string, { emoji: string; es: string; en: string; nl: st
   'window':       { emoji: '🪟', es: 'Ventana',    en: 'Window',     nl: 'Venster',     fr: 'Fenêtre' },
 }
 
-// Tonos de piel: paleta oficial Twemoji (modificadores Fitzpatrick) + 3 fantasía
-const SKIN_TONES = [
+// Fallback si la colección no tiene paleta configurada en Admin → Colores
+// (tabla color_palettes) — paleta oficial Twemoji (modificadores Fitzpatrick) + 3 fantasía
+const DEFAULT_SKIN_TONES = [
   { hex: '#F7DECE', emoji: '🏻', fantasy: false },
   { hex: '#F3D2A2', emoji: '🏼', fantasy: false },
   { hex: '#D5AB88', emoji: '🏽', fantasy: false },
@@ -87,9 +88,9 @@ const SKIN_TONES = [
   { hex: '#10B981', emoji: '💚', fantasy: true },
 ]
 
-// Colores de cabello predeterminados: 8 tonos naturales + 3 de fantasía
-// (mismo patrón que SKIN_TONES — borde punteado + ✦ para distinguirlos)
-const HAIR_COLORS = [
+// Fallback si la colección no tiene paleta configurada en Admin → Colores —
+// 8 tonos naturales + 3 de fantasía (mismo patrón — borde punteado + ✦)
+const DEFAULT_HAIR_COLORS = [
   { hex: '#1A1A1A', fantasy: false }, // negro
   { hex: '#3B2314', fantasy: false }, // castaño oscuro
   { hex: '#6B3A2A', fantasy: false }, // castaño
@@ -244,11 +245,17 @@ interface Props {
   settings?: SiteSettings | null
   colorUnlocks?: ColorUnlock[]
   masterKeywordIds?: string[]
+  colorPalettes?: ColorPalette[]
 }
 
-export default function BuilderClient({ locale: initialLocale, collection, layers, assets, exceptions, defaults, settings, colorUnlocks = [], masterKeywordIds = [] }: Props) {
+export default function BuilderClient({ locale: initialLocale, collection, layers, assets, exceptions, defaults, settings, colorUnlocks = [], masterKeywordIds = [], colorPalettes = [] }: Props) {
   const [locale, setLocale]       = useState(initialLocale)
   const [state, setState]         = useState<AvatarState>(() => buildInitialState(collection, layers, assets, defaults))
+
+  // Paletas configurables en Admin → Colores; si la colección todavía no
+  // tiene una guardada, se usa la interna por defecto.
+  const skinTones = colorPalettes.find(p => p.paletteKey === 'skin')?.swatches ?? DEFAULT_SKIN_TONES
+  const hairColors = colorPalettes.find(p => p.paletteKey === 'hair')?.swatches ?? DEFAULT_HAIR_COLORS
   const [exportUrl, setExportUrl] = useState<string | null>(null)
   const [shareUrl, setShareUrl]   = useState<string | null>(null)
   const [showWelcome, setShowWelcome] = useState(true)
@@ -410,8 +417,9 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
       const front = back ? assets.find(a => a.layerKey === 'hair-front' && a.name === back.name) : null
       sel['hair-front'] = front?.id ?? null
     }
-    const naturalHair = HAIR_COLORS.filter(c => !c.fantasy)
-    const skin = SKIN_TONES[Math.floor(Math.random() * 6)] // solo oficiales
+    const naturalSkin = skinTones.filter(c => !c.fantasy)
+    const naturalHair = hairColors.filter(c => !c.fantasy)
+    const skin = naturalSkin[Math.floor(Math.random() * naturalSkin.length)] // solo oficiales
     const hair = naturalHair[Math.floor(Math.random() * naturalHair.length)] // solo naturales
     setState(s => ({ ...s, selectedAssets: sel, tokens: { ...s.tokens, 'skin-color': skin.hex, 'hair-color': hair.hex } }))
   }
@@ -595,6 +603,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                         onAssetTransform={(id, tr) => setAssetTransform(p => ({ ...p, [id]: tr }))}
                         colorUnlocks={colorUnlocks}
                         masterKeywordIds={masterKeywordIds}
+                        skinTones={skinTones}
+                        hairColors={hairColors}
                         locale={locale}
                       />
                     </div>
@@ -684,6 +694,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
               onAssetTransform={(id, tr) => setAssetTransform(p => ({ ...p, [id]: tr }))}
               colorUnlocks={colorUnlocks}
               masterKeywordIds={masterKeywordIds}
+              skinTones={skinTones}
+              hairColors={hairColors}
               locale={locale}
             />
           </div>
@@ -760,10 +772,12 @@ interface LayerPanelProps {
   onAssetTransform:    (assetId: string, transform: AssetTransform) => void
   colorUnlocks:        ColorUnlock[]
   masterKeywordIds:    string[]
+  skinTones:           { hex: string; fantasy: boolean; emoji?: string }[]
+  hairColors:          { hex: string; fantasy: boolean }[]
   locale:              string
 }
 
-function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelectHair, onSkinChange, onHairColorChange, onExtraColorChange, assetTransform, onAssetTransform, colorUnlocks, masterKeywordIds, locale }: LayerPanelProps) {
+function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelectHair, onSkinChange, onHairColorChange, onExtraColorChange, assetTransform, onAssetTransform, colorUnlocks, masterKeywordIds, skinTones, hairColors, locale }: LayerPanelProps) {
   const t = makeT(locale)
   const layer = layers.find(l => l.layerKey === categoryKey)
 
@@ -779,13 +793,13 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
         <div>
           <Divider label={t('skinTone')} />
           <div className="flex flex-wrap gap-2.5 mt-3">
-            {SKIN_TONES.map(tone => {
+            {skinTones.map(tone => {
               const active = state.tokens['skin-color'] === tone.hex
               return (
                 <button
                   key={tone.hex}
                   onClick={() => onSkinChange(tone.hex)}
-                  title={tone.emoji}
+                  title={tone.emoji ?? tone.hex}
                   className="w-9 h-9 rounded-full transition-all relative fx-tap shrink-0"
                   style={{
                     background: tone.hex,
@@ -862,7 +876,7 @@ function LayerPanel({ categoryKey, layers, assets, state, onSelectAsset, onSelec
         <div>
           <Divider label={t('color')} />
           <div className="flex flex-wrap gap-2 mt-3">
-            {HAIR_COLORS.map(color => {
+            {hairColors.map(color => {
               const active = state.tokens['hair-color'] === color.hex
               return (
                 <button

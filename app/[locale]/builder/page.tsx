@@ -1,6 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { mapCollection, mapLayer, mapAsset, mapLayerException, mapLayerDefault, mapSiteSettings, mapColorUnlock } from '@/lib/supabase/mappers'
-import type { SiteSettings, ColorUnlock } from '@/types'
+import { mapCollection, mapLayer, mapAsset, mapLayerException, mapLayerDefault, mapSiteSettings, mapColorUnlock, mapColorPalette } from '@/lib/supabase/mappers'
+import type { SiteSettings, ColorUnlock, ColorPalette } from '@/types'
 import BuilderClient from './BuilderClient'
 
 // Sin esto, Next.js cachea las consultas a Supabase por debajo y el builder
@@ -68,6 +68,19 @@ export default async function BuilderPage({
     settings = null
   }
 
+  // Paletas de color por defecto (piel/cabello/ropa/accesorios) — tabla nueva,
+  // puede no existir aún si la migración 013 no se aplicó todavía. Si falta
+  // alguna paleta, BuilderClient cae a sus constantes internas por defecto.
+  let colorPalettes: ColorPalette[] = []
+  if (collection) {
+    try {
+      const { data: paletteRows } = await supabase.from('color_palettes').select('*').eq('collection_id', collection.id)
+      colorPalettes = (paletteRows || []).map(mapColorPalette)
+    } catch {
+      colorPalettes = []
+    }
+  }
+
   return (
     <BuilderClient
       locale={locale}
@@ -79,6 +92,7 @@ export default async function BuilderPage({
       settings={settings}
       colorUnlocks={colorUnlocks}
       masterKeywordIds={masterKeywordIds}
+      colorPalettes={colorPalettes}
     />
   )
 }

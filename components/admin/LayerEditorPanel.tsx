@@ -2,23 +2,31 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import type { Asset, Keyword, Layer } from '@/types'
+import type { Asset, Keyword, Layer, ColorPalette } from '@/types'
 import { pickThumb } from '@/lib/thumb'
 
 interface Props {
-  layer:        Layer
-  layerId:      string
-  layerKey:     string
-  layerName:    string
-  assets:       Asset[]
-  keywords:     Keyword[]
-  collectionId: string
-  onBack:       () => void
-  onUpdated:    () => void
+  layer:         Layer
+  layerId:       string
+  layerKey:      string
+  layerName:     string
+  assets:        Asset[]
+  keywords:      Keyword[]
+  collectionId:  string
+  colorPalettes: ColorPalette[]
+  onBack:        () => void
+  onUpdated:     () => void
+}
+
+// Qué paleta de Admin → Colores sugerir como punto de partida al activar
+// color por primera vez en una capa que todavía no tiene muestras propias.
+const LAYER_PALETTE_KEY: Record<string, ColorPalette['paletteKey']> = {
+  shirt: 'clothing', clothes: 'clothing',
+  'acc-front': 'accessories', hat: 'accessories', mask: 'accessories',
 }
 
 export default function LayerEditorPanel({
-  layer, layerId, layerName, assets: initialAssets, keywords: initialKws, collectionId, onBack, onUpdated,
+  layer, layerId, layerKey, layerName, assets: initialAssets, keywords: initialKws, collectionId, colorPalettes, onBack, onUpdated,
 }: Props) {
   const [name,        setName]        = useState(layerName)
   const [localAssets, setLocalAssets] = useState<Asset[]>(initialAssets)
@@ -57,7 +65,12 @@ export default function LayerEditorPanel({
   const [targetRole,  setTargetRole]  = useState(layer.colorTargetRole ?? roleOptions[0]?.[0] ?? '')
   const [useSwatches, setUseSwatches] = useState(layer.colorMode === 'swatches' || layer.colorMode === 'both')
   const [useCustom,   setUseCustom]   = useState(layer.colorMode === 'wheel' || layer.colorMode === 'both')
-  const [swatches,    setSwatches]    = useState<string[]>(layer.colorSwatches ?? ['#ffffff', '#000000', '#ff0000'])
+  // Si la capa no tiene muestras propias todavía, se parte de la paleta
+  // armonizada correspondiente (Admin → Colores) en vez de colores genéricos.
+  const suggestedPalette = colorPalettes.find(p => p.paletteKey === LAYER_PALETTE_KEY[layerKey])
+  const [swatches, setSwatches] = useState<string[]>(
+    layer.colorSwatches ?? suggestedPalette?.swatches.map(s => s.hex) ?? ['#ffffff', '#000000', '#ff0000']
+  )
   const [savingRules, setSavingRules] = useState(false)
   const [resetting,   setResetting]   = useState(false)
 

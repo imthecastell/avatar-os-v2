@@ -1,4 +1,4 @@
-import type { Asset, Layer, LayerException, LayerDefault, Keyword, Collection, SiteSettings, AvatarState, ColorUnlock } from '@/types'
+import type { Asset, Layer, LayerException, LayerDefault, Keyword, Collection, SiteSettings, AvatarState, ColorUnlock, ColorPalette, ColorSwatch } from '@/types'
 
 export function mapAsset(r: Record<string, unknown>): Asset {
   return {
@@ -110,6 +110,17 @@ export function mapSiteSettings(r: Record<string, unknown>): SiteSettings {
     socialWebsite:       r.social_website as string | null,
     creatorAvatarState:  r.creator_avatar_state as AvatarState | null,
     creatorCollectionId: r.creator_collection_id as string | null,
+  }
+}
+
+export function mapColorPalette(r: Record<string, unknown>): ColorPalette {
+  return {
+    id:           r.id as string,
+    collectionId: r.collection_id as string,
+    paletteKey:   r.palette_key as ColorPalette['paletteKey'],
+    labelEs:      r.label_es as string,
+    labelEn:      r.label_en as string,
+    swatches:     (r.swatches as ColorSwatch[]) ?? [],
   }
 }
 

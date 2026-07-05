@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { key: 'studio',      label: 'Studio',      href: '' },
   { key: 'collections', label: 'Colecciones', href: 'collections' },
   { key: 'keywords',    label: 'Keywords',    href: 'keywords' },
+  { key: 'colors',      label: 'Colores',     href: 'colors' },
   { key: 'exceptions',  label: 'Excepciones', href: 'exceptions' },
   { key: 'defaults',    label: 'Defaults',    href: 'defaults' },
   { key: 'settings',    label: 'Bienvenida',  href: 'settings' },

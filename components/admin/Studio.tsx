@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
-import type { Layer, Asset, Collection, AvatarState, Keyword, AssetTransform, ColorUnlock } from '@/types'
+import type { Layer, Asset, Collection, AvatarState, Keyword, AssetTransform, ColorUnlock, ColorPalette } from '@/types'
 import AssetInspector from '@/components/admin/AssetInspector'
 import SmartBatchUploader from '@/components/admin/SmartBatchUploader'
 import LayerEditorPanel from '@/components/admin/LayerEditorPanel'
@@ -72,14 +72,15 @@ function buildDefaultState(collectionId: string, layers: Layer[], assets: Asset[
 }
 
 interface Props {
-  collections:  Collection[]
-  layers:       Layer[]
-  assets:       Asset[]
-  keywords:     Keyword[]
-  colorUnlocks: ColorUnlock[]
+  collections:   Collection[]
+  layers:        Layer[]
+  assets:        Asset[]
+  keywords:      Keyword[]
+  colorUnlocks:  ColorUnlock[]
+  colorPalettes: ColorPalette[]
 }
 
-export default function Studio({ collections, layers: initialLayers, assets, keywords, colorUnlocks }: Props) {
+export default function Studio({ collections, layers: initialLayers, assets, keywords, colorUnlocks, colorPalettes }: Props) {
   const firstCollId = collections[0]?.id ?? ''
   const [collectionId, setCollectionId] = useState(firstCollId)
   const [layers, setLayers] = useState(initialLayers)
@@ -1058,6 +1059,7 @@ export default function Studio({ collections, layers: initialLayers, assets, key
             assets={assets.filter(a => a.collectionId === collectionId && a.layerKey === selectedLayer.layerKey)}
             keywords={keywords}
             collectionId={collectionId}
+            colorPalettes={colorPalettes.filter(p => p.collectionId === collectionId)}
             onBack={() => setLayerEditMode(false)}
             onUpdated={() => window.location.reload()}
           />

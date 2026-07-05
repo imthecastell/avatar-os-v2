@@ -104,6 +104,20 @@ export interface LayerDefault {
   defaultName:  string | null
 }
 
+export interface ColorSwatch {
+  hex:     string
+  fantasy: boolean   // borde punteado + insignia ✦ en la UI (tonos no "naturales")
+}
+
+export interface ColorPalette {
+  id:            string
+  collectionId:  string
+  paletteKey:    'skin' | 'hair' | 'clothing' | 'accessories'
+  labelEs:       string
+  labelEn:       string
+  swatches:      ColorSwatch[]
+}
+
 export interface Keyword {
   id:           string
   collectionId: string
