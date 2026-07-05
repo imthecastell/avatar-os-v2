@@ -45,12 +45,19 @@ const AvatarStage = forwardRef<AvatarStageHandle, Props>(function AvatarStage(
     const charIdx = sorted.map((l, i) => (!STATIC_KEYS.has(l.layerKey) ? i : -1)).filter(i => i >= 0)
     const firstChar = charIdx[0] ?? sorted.length
     const lastChar  = charIdx[charIdx.length - 1] ?? -1
+    const chars = sorted.filter(l => !STATIC_KEYS.has(l.layerKey))
+
+    // El parpadeo va justo encima de "head" — todo lo que se dibuja DESPUÉS
+    // (lentes, sombreros, cabello frontal…) debe taparlo, no al revés.
+    const headOrder = layers.find(l => l.layerKey === 'head')?.orderIndex ?? Infinity
 
     return {
       // estáticos por debajo del personaje (fondo, marco, arco…)
       under: sorted.filter((l, i) => STATIC_KEYS.has(l.layerKey) && i < firstChar),
-      // el personaje completo — levita en bloque
-      chars: sorted.filter(l => !STATIC_KEYS.has(l.layerKey)),
+      // personaje hasta la cabeza inclusive — levita en bloque junto con lo demás
+      charsUnderBlink: chars.filter(l => l.orderIndex <= headOrder),
+      // lo que va sobre la cara (lentes, sombreros, cabello frontal…)
+      charsOverBlink: chars.filter(l => l.orderIndex > headOrder),
       // estáticos por encima (effect-final) — cada uno en su canvas para
       // que su blend mode se aplique sobre TODO lo de abajo vía CSS
       overs: sorted.filter((l, i) => STATIC_KEYS.has(l.layerKey) && i > lastChar),
@@ -79,9 +86,11 @@ const AvatarStage = forwardRef<AvatarStageHandle, Props>(function AvatarStage(
       const ctx = out.getContext('2d')!
 
       const under = compsRef.current.get('under')
-      const chars = compsRef.current.get('chars')
+      const charsUnderBlink = compsRef.current.get('chars-under-blink')
+      const charsOverBlink  = compsRef.current.get('chars-over-blink')
       if (under) ctx.drawImage(under.getCanvas(), 0, 0)
-      if (chars) ctx.drawImage(chars.getCanvas(), 0, 0)
+      if (charsUnderBlink) ctx.drawImage(charsUnderBlink.getCanvas(), 0, 0)
+      if (charsOverBlink) ctx.drawImage(charsOverBlink.getCanvas(), 0, 0)
 
       for (const layer of groups.overs) {
         const comp = compsRef.current.get(`over-${layer.id}`)
@@ -104,23 +113,28 @@ const AvatarStage = forwardRef<AvatarStageHandle, Props>(function AvatarStage(
         <AvatarCanvas state={state} layers={groups.under} assets={assets} size={size} onCompositorReady={onReady('under')} />
       </div>
 
-      {/* Personaje — levita en bloque */}
+      {/* Personaje — levita en bloque. El parpadeo se dibuja justo encima de
+          "head" y por debajo de todo lo que va después en el stack (lentes,
+          sombreros, cabello frontal…), para que esos elementos lo tapen en
+          vez de quedar el parche flotando sobre ellos. */}
       <div className="absolute inset-0 fx-float">
-        <AvatarCanvas state={state} layers={groups.chars} assets={assets} size={size} onCompositorReady={onReady('chars')} />
+        <AvatarCanvas state={state} layers={groups.charsUnderBlink} assets={assets} size={size} onCompositorReady={onReady('chars-under-blink')} />
 
         {/* Parpadeo — dos óvalos (uno por ojo, no una franja) del tono de piel
             actual, calibrados sobre el grupo "Expression" real del SVG de
             cabeza (medido por posición de píxel en las 6 formas de cabeza:
-            ambos ojos caen siempre en la misma banda). Aparecen y desaparecen
-            con fx-blink. Solo viven en la vista previa — no forman parte de
-            ningún canvas, así que nunca aparecen en el PNG exportado. */}
+            ambos ojos caen siempre en la misma banda). transformOrigin:'top'
+            hace que crezcan HACIA ABAJO desde el borde superior — un párpado
+            bajando, no un iris abriéndose desde el centro. Solo viven en la
+            vista previa — no forman parte de ningún canvas, así que nunca
+            aparecen en el PNG exportado. */}
         <div
           className="absolute fx-blink pointer-events-none"
           style={{
             top: '40%', left: '38.8%', width: '8%', height: '11%',
             borderRadius: '50%',
             background: state.tokens['skin-color'] ?? '#C68642',
-            transformOrigin: 'center',
+            transformOrigin: 'top',
           }}
         />
         <div
@@ -129,9 +143,11 @@ const AvatarStage = forwardRef<AvatarStageHandle, Props>(function AvatarStage(
             top: '40%', left: '53.2%', width: '8%', height: '11%',
             borderRadius: '50%',
             background: state.tokens['skin-color'] ?? '#C68642',
-            transformOrigin: 'center',
+            transformOrigin: 'top',
           }}
         />
+
+        <AvatarCanvas state={state} layers={groups.charsOverBlink} assets={assets} size={size} onCompositorReady={onReady('chars-over-blink')} />
       </div>
 
       {/* Overlays superiores — quietos, blend vía CSS sobre todo lo de abajo.
