@@ -47,6 +47,7 @@ export const DICT = {
   downloadSocial:      { es: 'Descargar para redes',                    en: 'Download for social',            nl: 'Downloaden voor social',            fr: 'Télécharger pour les réseaux' },
   downloadPfp:         { es: 'Descargar PFP',                           en: 'Download PFP',                   nl: 'PFP downloaden',                    fr: 'Télécharger le PFP' },
   share:               { es: 'Compartir',                               en: 'Share',                           nl: 'Delen',                             fr: 'Partager' },
+  avatarNamePlaceholder: { es: 'Nombre de tu avatar (opcional)',         en: "Your avatar's name (optional)", nl: 'Naam van je avatar (optioneel)',    fr: 'Nom de ton avatar (facultatif)' },
   myAvatarShareTitle:  { es: 'Mi Avatar',                                en: 'My Avatar',                      nl: 'Mijn Avatar',                       fr: 'Mon Avatar' },
 } as const
 

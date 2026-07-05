@@ -6,18 +6,33 @@ import { renderFramedShare } from '@/lib/engine/share-frame'
 import { makeT } from '@/lib/i18n/dict'
 
 interface Props {
-  dataUrl:   string
-  shareUrl?: string
-  title?:    string   // texto superior de la placa (ej. nombre de la colección)
-  subtitle?: string   // texto inferior de la placa
-  locale:    string
-  onClose:   () => void
+  dataUrl:       string
+  shareUrl?:     string
+  collectionName: string        // ej. "Castells S6"
+  creatorName:    string | null // ej. "Castell"
+  locale:         string
+  onClose:        () => void
 }
 
-export default function ExportModal({ dataUrl, title = 'Avatar OS', subtitle = 'Original', locale, onClose }: Props) {
+export default function ExportModal({ dataUrl, collectionName, creatorName, locale, onClose }: Props) {
   const t = makeT(locale)
-  const linkRef                   = useRef<HTMLAnchorElement>(null)
-  const [framedUrl, setFramedUrl] = useState<string | null>(null)
+  const linkRef                     = useRef<HTMLAnchorElement>(null)
+  const [framedUrl, setFramedUrl]   = useState<string | null>(null)
+  const [nameInput, setNameInput]   = useState('')
+  const [avatarName, setAvatarName] = useState('') // versión con debounce — evita re-renderizar la placa en cada tecla
+
+  useEffect(() => {
+    const id = setTimeout(() => setAvatarName(nameInput.trim()), 400)
+    return () => clearTimeout(id)
+  }, [nameInput])
+
+  // Placa: "{nombre del avatar}" arriba, "{colección} by {creador}" abajo —
+  // ej. "Luis58" / "Castells S6 by Castell". Sin nombre, se ve como antes
+  // (colección arriba, creador o "Original" abajo).
+  const title    = avatarName || collectionName
+  const subtitle = avatarName
+    ? (creatorName ? `${collectionName} by ${creatorName}` : collectionName)
+    : (creatorName ? `By ${creatorName}` : 'Original')
 
   // La versión enmarcada tarda un frame en componerse (carga la imagen en
   // un <img> interno) — mientras tanto se muestra el PNG plano de respaldo.
@@ -70,6 +85,19 @@ export default function ExportModal({ dataUrl, title = 'Avatar OS', subtitle = '
             className="text-lg leading-none"
             style={{ color: 'rgba(255,255,255,0.3)' }}
           >✕</button>
+        </div>
+
+        {/* Nombre del avatar — opcional, se ve reflejado en la placa dorada */}
+        <div className="px-5 pb-3 shrink-0">
+          <input
+            type="text"
+            value={nameInput}
+            onChange={e => setNameInput(e.target.value)}
+            placeholder={t('avatarNamePlaceholder')}
+            maxLength={40}
+            className="w-full text-xs rounded-xl px-3 py-2 border focus:outline-none focus:border-violet-500 transition-colors"
+            style={{ background: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)', color: 'white' }}
+          />
         </div>
 
         {/* Preview — con scroll propio: la versión enmarcada es 9:16 y en

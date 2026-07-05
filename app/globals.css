@@ -44,6 +44,15 @@ body {
 }
 .fx-breathe { animation: fx-breathe 5s ease-in-out infinite; }
 
+/* Parpadeo del avatar en vivo — una franja del color de piel actual se
+   superpone brevemente sobre la zona de los ojos, simulando el párpado
+   cerrándose. Nunca toca el PNG exportado (solo vive en la vista previa). */
+@keyframes fx-blink {
+  0%, 92%, 100% { transform: scaleY(0); }
+  94%, 97%      { transform: scaleY(1); }
+}
+.fx-blink { animation: fx-blink 4.5s ease-in-out infinite; }
+
 /* Pop al seleccionar una pieza — dos nombres idénticos para
    poder re-disparar alternando la clase sin re-montar el canvas */
 @keyframes fx-pop-a {
@@ -140,7 +149,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .fx-float, .fx-breathe, .fx-pop-a, .fx-pop-b, .fx-dice,
   .fx-slide-up, .fx-item-in, .fx-confetti-piece, .fx-modal-in,
-  .fx-fade-in, .fx-shimmer {
+  .fx-fade-in, .fx-shimmer, .fx-blink {
     animation: none;
   }
 }

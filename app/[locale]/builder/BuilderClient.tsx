@@ -763,8 +763,8 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
         <ExportModal
           dataUrl={exportUrl}
           shareUrl={shareUrl ?? undefined}
-          title={collection?.name ?? 'Avatar OS'}
-          subtitle={settings?.creatorName ? `By ${settings.creatorName}` : 'Original'}
+          collectionName={collection?.name ?? 'Avatar OS'}
+          creatorName={settings?.creatorName ?? null}
           locale={locale}
           onClose={() => { setExportUrl(null); setShareUrl(null) }}
         />

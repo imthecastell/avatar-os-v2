@@ -107,6 +107,19 @@ const AvatarStage = forwardRef<AvatarStageHandle, Props>(function AvatarStage(
       {/* Personaje — levita en bloque */}
       <div className="absolute inset-0 fx-float">
         <AvatarCanvas state={state} layers={groups.chars} assets={assets} size={size} onCompositorReady={onReady('chars')} />
+
+        {/* Parpadeo — franja del tono de piel actual sobre la zona de los ojos,
+            aparece y desaparece con fx-blink. Solo vive en la vista previa en
+            vivo (este div no forma parte de ningún canvas, así que nunca
+            aparece en el PNG exportado). */}
+        <div
+          className="absolute fx-blink pointer-events-none"
+          style={{
+            top: '36%', left: '30%', width: '40%', height: '6%',
+            background: state.tokens['skin-color'] ?? '#C68642',
+            transformOrigin: 'center',
+          }}
+        />
       </div>
 
       {/* Overlays superiores — quietos, blend vía CSS sobre todo lo de abajo.
