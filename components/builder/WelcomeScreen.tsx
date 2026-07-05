@@ -4,6 +4,7 @@ import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { AvatarState, Layer, Asset, SiteSettings, Collection } from '@/types'
 import { makeT } from '@/lib/i18n/dict'
+import LocaleSwitcher from '@/components/builder/LocaleSwitcher'
 
 const AvatarCanvas = dynamic(() => import('@/components/builder/AvatarCanvas'), {
   ssr: false,
@@ -11,12 +12,13 @@ const AvatarCanvas = dynamic(() => import('@/components/builder/AvatarCanvas'), 
 })
 
 interface Props {
-  locale:     string
-  collection: Collection
-  layers:     Layer[]
-  assets:     Asset[]
-  settings:   SiteSettings | null
-  onEnter:    (unlock: { keywordId: string } | null) => void
+  locale:         string
+  onLocaleChange: (locale: string) => void
+  collection:     Collection
+  layers:         Layer[]
+  assets:         Asset[]
+  settings:       SiteSettings | null
+  onEnter:        (unlock: { keywordId: string } | null) => void
 }
 
 const SOCIAL_ICONS: Record<string, string> = {
@@ -26,7 +28,7 @@ const SOCIAL_ICONS: Record<string, string> = {
   socialWebsite:   '🌐',
 }
 
-export default function WelcomeScreen({ locale, collection, layers, assets, settings, onEnter }: Props) {
+export default function WelcomeScreen({ locale, onLocaleChange, collection, layers, assets, settings, onEnter }: Props) {
   const t = makeT(locale)
   const [keyword, setKeyword]   = useState('')
   const [status, setStatus]     = useState<'idle' | 'loading' | 'err'>('idle')
@@ -64,6 +66,10 @@ export default function WelcomeScreen({ locale, collection, layers, assets, sett
     >
       {/* Textura decorativa de fondo */}
       <div className="absolute inset-0 pointer-events-none opacity-40 bg-castells-texture" />
+
+      <div className="absolute top-4 right-4 z-10">
+        <LocaleSwitcher locale={locale} onChange={onLocaleChange} />
+      </div>
 
       <div className="relative w-full max-w-sm flex flex-col items-center px-6 pt-10 pb-8 gap-6">
 

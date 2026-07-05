@@ -3,16 +3,19 @@
 import { useEffect, useRef, useState } from 'react'
 import ConfettiBurst from '@/components/builder/ConfettiBurst'
 import { renderFramedShare } from '@/lib/engine/share-frame'
+import { makeT } from '@/lib/i18n/dict'
 
 interface Props {
   dataUrl:   string
   shareUrl?: string
   title?:    string   // texto superior de la placa (ej. nombre de la colección)
   subtitle?: string   // texto inferior de la placa
+  locale:    string
   onClose:   () => void
 }
 
-export default function ExportModal({ dataUrl, title = 'Avatar OS', subtitle = 'Original', onClose }: Props) {
+export default function ExportModal({ dataUrl, title = 'Avatar OS', subtitle = 'Original', locale, onClose }: Props) {
+  const t = makeT(locale)
   const linkRef                   = useRef<HTMLAnchorElement>(null)
   const [framedUrl, setFramedUrl] = useState<string | null>(null)
 
@@ -42,7 +45,7 @@ export default function ExportModal({ dataUrl, title = 'Avatar OS', subtitle = '
     if (!navigator.share) { handleDownloadSocial(); return }
     const blob = await (await fetch(shareImageUrl)).blob()
     const file = new File([blob], 'avatar.png', { type: 'image/png' })
-    await navigator.share({ title: 'Mi Avatar', files: [file] })
+    await navigator.share({ title: t('myAvatarShareTitle'), files: [file] })
   }
 
   return (
@@ -59,8 +62,8 @@ export default function ExportModal({ dataUrl, title = 'Avatar OS', subtitle = '
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0">
           <div>
-            <p className="text-sm font-semibold text-white">Tu Avatar está listo ✦</p>
-            <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>Cada pieza es única, como tú.</p>
+            <p className="text-sm font-semibold text-white">{t('exportReadyTitle')}</p>
+            <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{t('exportReadySubtitle')}</p>
           </div>
           <button
             onClick={onClose}
@@ -90,14 +93,14 @@ export default function ExportModal({ dataUrl, title = 'Avatar OS', subtitle = '
               className="text-sm font-semibold py-2.5 rounded-xl transition-all"
               style={{ background: 'linear-gradient(135deg,#6d28d9,#9333ea)', color: 'white' }}
             >
-              Descargar para redes
+              {t('downloadSocial')}
             </button>
             <button
               onClick={handleDownloadPfp}
               className="text-sm font-medium py-2.5 rounded-xl transition-all"
               style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)' }}
             >
-              Descargar PFP
+              {t('downloadPfp')}
             </button>
           </div>
 
@@ -107,7 +110,7 @@ export default function ExportModal({ dataUrl, title = 'Avatar OS', subtitle = '
               className="w-full text-sm font-medium py-2.5 rounded-xl transition-all"
               style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)' }}
             >
-              Compartir
+              {t('share')}
             </button>
           )}
         </div>

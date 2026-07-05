@@ -40,6 +40,14 @@ export const DICT = {
   positionX:          { es: 'Posición horizontal',                      en: 'Horizontal position',            nl: 'Horizontale positie',               fr: 'Position horizontale' },
   positionY:          { es: 'Posición vertical',                        en: 'Vertical position',              nl: 'Verticale positie',                 fr: 'Position verticale' },
   resetAdjustment:    { es: 'Restablecer',                              en: 'Reset',                          nl: 'Resetten',                          fr: 'Réinitialiser' },
+
+  // Modal de exportar/compartir
+  exportReadyTitle:    { es: 'Tu Avatar está listo ✦',                   en: 'Your Avatar is ready ✦',        nl: 'Je Avatar is klaar ✦',              fr: 'Ton Avatar est prêt ✦' },
+  exportReadySubtitle: { es: 'Cada pieza es única, como tú.',            en: 'Every piece is unique, like you.', nl: 'Elk stuk is uniek, net als jij.', fr: 'Chaque pièce est unique, comme toi.' },
+  downloadSocial:      { es: 'Descargar para redes',                    en: 'Download for social',            nl: 'Downloaden voor social',            fr: 'Télécharger pour les réseaux' },
+  downloadPfp:         { es: 'Descargar PFP',                           en: 'Download PFP',                   nl: 'PFP downloaden',                    fr: 'Télécharger le PFP' },
+  share:               { es: 'Compartir',                               en: 'Share',                           nl: 'Delen',                             fr: 'Partager' },
+  myAvatarShareTitle:  { es: 'Mi Avatar',                                en: 'My Avatar',                      nl: 'Mijn Avatar',                       fr: 'Mon Avatar' },
 } as const
 
 export type DictKey = keyof typeof DICT
