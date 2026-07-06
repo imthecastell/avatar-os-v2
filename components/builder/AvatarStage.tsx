@@ -118,7 +118,9 @@ const AvatarStage = forwardRef<AvatarStageHandle, Props>(function AvatarStage(
           sombreros, cabello frontal…), para que esos elementos lo tapen en
           vez de quedar el parche flotando sobre ellos. */}
       <div className="absolute inset-0 fx-float">
-        <AvatarCanvas state={state} layers={groups.charsUnderBlink} assets={assets} size={size} onCompositorReady={onReady('chars-under-blink')} />
+        <div className="absolute inset-0">
+          <AvatarCanvas state={state} layers={groups.charsUnderBlink} assets={assets} size={size} onCompositorReady={onReady('chars-under-blink')} />
+        </div>
 
         {/* Parpadeo — dos óvalos (uno por ojo, no una franja) del tono de piel
             actual, calibrados sobre el grupo "Expression" real del SVG de
@@ -147,7 +149,9 @@ const AvatarStage = forwardRef<AvatarStageHandle, Props>(function AvatarStage(
           }}
         />
 
-        <AvatarCanvas state={state} layers={groups.charsOverBlink} assets={assets} size={size} onCompositorReady={onReady('chars-over-blink')} />
+        <div className="absolute inset-0">
+          <AvatarCanvas state={state} layers={groups.charsOverBlink} assets={assets} size={size} onCompositorReady={onReady('chars-over-blink')} />
+        </div>
       </div>
 
       {/* Overlays superiores — quietos, blend vía CSS sobre todo lo de abajo.
