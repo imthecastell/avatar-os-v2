@@ -421,7 +421,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     setPopTick(t => t + 1)
     const sel: Record<string, string | null> = {}
     for (const layer of layers) {
-      const opts = assets.filter(a => a.layerKey === layer.layerKey && !a.keywordId)
+      const opts = assets.filter(a => a.layerKey === layer.layerKey && isAssetUnlocked(a, state, masterKeywordIds))
       if (!opts.length) { sel[layer.layerKey] = null; continue }
       // body nunca se omite: sin él la cabeza queda flotando sin cuello ni brazos
       if (layer.optional && layer.layerKey !== 'body' && Math.random() < 0.4) { sel[layer.layerKey] = null; continue }
