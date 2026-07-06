@@ -421,7 +421,6 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     setPopTick(t => t + 1)
     const sel: Record<string, string | null> = {}
     for (const layer of layers) {
-      if (!layer.visibleInBuilder) { sel[layer.layerKey] = null; continue }
       const opts = assets.filter(a => a.layerKey === layer.layerKey && isAssetUnlocked(a, state, masterKeywordIds))
       if (!opts.length) { sel[layer.layerKey] = null; continue }
       // body nunca se omite: sin él la cabeza queda flotando sin cuello ni brazos
@@ -548,7 +547,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
                 <AvatarStage
                   ref={stageRef}
                   state={state}
-                  layers={layers.filter(l => l.visibleInBuilder && !hiddenLayers.has(l.layerKey))}
+                  layers={layers.filter(l => !hiddenLayers.has(l.layerKey))}
                   assets={canvasAssets}
                 />
               </div>
