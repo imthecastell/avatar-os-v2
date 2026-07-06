@@ -167,6 +167,15 @@ function isAssetUnlocked(asset: Asset, state: AvatarState, masterKeywordIds: str
   return state.unlockedKeywords.some(id => masterKeywordIds.includes(id))
 }
 
+// Empareja un asset de hair-back con su hair-front correspondiente por el
+// sufijo del nombre (ej. "Hair Back_3" ↔ "Hair Front_3") — los nombres llevan
+// prefijos distintos ("Hair Back" / "Hair Front") así que comparar por
+// igualdad exacta nunca coincide, dejando el peinado siempre calvo.
+function matchingHairFront(back: Asset, assets: Asset[]): Asset | undefined {
+  const key = back.name.replace(/hair\s*back\s*/i, '').trim().toLowerCase()
+  return assets.find(a => a.layerKey === 'hair-front' && a.name.replace(/hair\s*front\s*/i, '').trim().toLowerCase() === key)
+}
+
 // Reglas de color_unlocks activas para una capa: la keyword requerida está
 // desbloqueada (o el usuario tiene alguna keyword master) Y, si la regla
 // exige un asset específico seleccionado (ej. una chaqueta abierta),
@@ -403,7 +412,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
       const sel: Record<string, string | null> = { ...s.selectedAssets, 'hair-back': assetId }
       if (assetId) {
         const back  = assets.find(a => a.id === assetId)
-        const front = back ? assets.find(a => a.layerKey === 'hair-front' && a.name === back.name) : null
+        const front = back ? matchingHairFront(back, assets) : null
         sel['hair-front'] = front?.id ?? null
         if (back?.suggestedColor) {
           return { ...s, selectedAssets: sel, tokens: { ...s.tokens, 'hair-color': back.suggestedColor } }
@@ -430,7 +439,7 @@ export default function BuilderClient({ locale: initialLocale, collection, layer
     // Sincronizar hair-front con hair-back
     if (sel['hair-back']) {
       const back  = assets.find(a => a.id === sel['hair-back'])
-      const front = back ? assets.find(a => a.layerKey === 'hair-front' && a.name === back.name) : null
+      const front = back ? matchingHairFront(back, assets) : null
       sel['hair-front'] = front?.id ?? null
     }
     const naturalSkin = skinTones.filter(c => !c.fantasy)
