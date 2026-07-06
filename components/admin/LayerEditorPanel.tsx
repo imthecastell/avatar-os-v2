@@ -59,6 +59,16 @@ export default function LayerEditorPanel({
   const roleOptions: [string, string][] = Array.from(
     new Map(initialAssets.flatMap(a => a.colorMap).map(c => [c.role, c.label || c.role])).entries()
   )
+  // Igual que roleOptions pero conservando color ORIGINAL detectado + una
+  // miniatura del asset donde se detectó, para mostrar una muestra visual en
+  // vez de que el admin elija a ciegas por un nombre de rol abstracto.
+  const roleSwatches: { role: string; label: string; original: string; thumb: string }[] = Array.from(
+    new Map(
+      initialAssets.flatMap(a => a.colorMap.map(c =>
+        [c.role, { role: c.role, label: c.label || c.role, original: c.original, thumb: pickThumb(a) }] as const
+      ))
+    ).values()
+  )
   const [rulesOn,     setRulesOn]     = useState(layer.colorEditable || layer.positionEditable)
   const [colorOn,     setColorOn]     = useState(layer.colorEditable)
   const [positionOn,  setPositionOn]  = useState(layer.positionEditable)
@@ -284,17 +294,40 @@ export default function LayerEditorPanel({
                   <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
                     Región de color editable (ej. chaqueta gris con camiseta azul debajo — elige la región azul)
                   </p>
-                  {roleOptions.length === 0 ? (
+                  {roleSwatches.length === 0 ? (
                     <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>Ningún asset de esta capa tiene colores detectados todavía.</p>
                   ) : (
-                    <select
-                      value={targetRole}
-                      onChange={e => setTargetRole(e.target.value)}
-                      className="w-full text-[10px] rounded-lg px-2 py-1.5 border focus:outline-none"
-                      style={inputS}
-                    >
-                      {roleOptions.map(([value, roleLabel]) => <option key={value} value={value}>{roleLabel}</option>)}
-                    </select>
+                    <div className="flex flex-wrap gap-2">
+                      {roleSwatches.map(({ role, label: roleLabel, original, thumb }) => {
+                        const checked = targetRole === role
+                        return (
+                          <button
+                            key={role}
+                            type="button"
+                            onClick={() => setTargetRole(role)}
+                            className="flex flex-col items-center gap-1"
+                            title={original}
+                          >
+                            <span
+                              className="relative w-9 h-9 rounded-lg block overflow-hidden transition-all"
+                              style={{
+                                background: original,
+                                boxShadow: checked
+                                  ? '0 0 0 2px #111120, 0 0 0 4px #7c3aed'
+                                  : '0 0 0 1px rgba(255,255,255,0.15)',
+                              }}
+                            >
+                              {thumb && (
+                                <Image src={thumb} alt="" width={36} height={36} className="absolute inset-0 w-full h-full object-cover opacity-40" unoptimized />
+                              )}
+                            </span>
+                            <span className="text-[9px] max-w-[3.5rem] truncate" style={{ color: checked ? 'white' : 'rgba(255,255,255,0.4)' }}>
+                              {roleLabel}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
                   )}
                   <label className="flex items-center gap-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
                     <input type="checkbox" checked={useSwatches} onChange={e => setUseSwatches(e.target.checked)} />

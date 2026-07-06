@@ -64,6 +64,13 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
   const ownRoleOptions: [string, string][] = asset.colorMap.length > 0
     ? Array.from(new Map(asset.colorMap.map(c => [c.role, c.label || c.role])).entries())
     : ROLE_OPTIONS.map(r => [r.value, r.label] as [string, string])
+  // Igual que ownRoleOptions pero conservando el color ORIGINAL detectado en el
+  // SVG para cada región — permite mostrarlo como muestra visual en vez de que
+  // el admin elija a ciegas por un nombre de rol abstracto (Principal/Detalle…).
+  const ownRoleSwatches: { role: string; label: string; original: string }[] = asset.colorMap.length > 0
+    ? Array.from(new Map(asset.colorMap.map(c => [c.role, c])).values())
+        .map(c => ({ role: c.role, label: c.label || c.role, original: c.original }))
+    : ROLE_OPTIONS.map(r => ({ role: r.value, label: r.label, original: '#888888' }))
   // Tri-estado: heredar el default de color de la capa, desactivarlo para
   // este asset puntual, o darle una configuración propia (con o sin
   // palabras clave que la gatillen).
@@ -402,6 +409,52 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
               />
               {colorOverride === 'custom' && (
                 <div className="mt-3 p-3 rounded-xl space-y-2.5" style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.15)' }}>
+                  {/* Miniatura + selector visual: qué color DEL ASSET se vuelve
+                      editable. Antes era un <select> con nombres abstractos
+                      (Principal/Secundario/Detalle) sin ninguna referencia visual
+                      a qué parte del asset representaba cada uno. */}
+                  <div className="flex items-start gap-3">
+                    {asset.cdnUrl && (
+                      <div
+                        className="w-16 h-16 rounded-xl overflow-hidden shrink-0"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+                      >
+                        <Image src={asset.cdnUrl} alt={asset.name} width={64} height={64} className="w-full h-full object-contain" unoptimized />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        Elige qué color del asset se vuelve editable:
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {ownRoleSwatches.map(({ role, label: roleLabel, original }) => {
+                          const checked = ownTargetRole === role
+                          return (
+                            <button
+                              key={role}
+                              type="button"
+                              onClick={() => setOwnTargetRole(role)}
+                              className="flex flex-col items-center gap-1"
+                              title={original}
+                            >
+                              <span
+                                className="w-8 h-8 rounded-lg block transition-all"
+                                style={{
+                                  background: original,
+                                  boxShadow: checked
+                                    ? '0 0 0 2px #111120, 0 0 0 4px #7c3aed'
+                                    : '0 0 0 1px rgba(255,255,255,0.15)',
+                                }}
+                              />
+                              <span className="text-[9px] max-w-[3.5rem] truncate" style={{ color: checked ? 'white' : 'rgba(255,255,255,0.4)' }}>
+                                {roleLabel}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
                   <div>
                     <p className="text-[10px] mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
                       Palabras clave que desbloquean la función (opcional — ninguna marcada = siempre disponible):
@@ -430,17 +483,11 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
                       </div>
                     )}
                   </div>
-                  {ownRoleOptions.length > 1 && (
-                    <select
-                      value={ownTargetRole}
-                      onChange={e => setOwnTargetRole(e.target.value)}
-                      className="w-full text-[10px] rounded-lg px-2 py-1.5 border focus:outline-none"
-                      style={inputS}
-                    >
-                      {ownRoleOptions.map(([value, roleLabel]) => <option key={value} value={value}>{roleLabel}</option>)}
-                    </select>
-                  )}
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <div>
+                    <p className="text-[10px] mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      Colores que podrá elegir el usuario para esa región:
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
                     {ownSwatches.map((hex, i) => (
                       <div key={i} className="relative">
                         <input
@@ -469,6 +516,7 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
                     >
                       +
                     </button>
+                    </div>
                   </div>
                 </div>
               )}
