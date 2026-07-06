@@ -82,6 +82,12 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
   )
   const [ownTargetRole,  setOwnTargetRole]  = useState<string>(ownColorRules[0]?.targetRole ?? ownRoleOptions[0]?.[0] ?? 'skin')
   const [ownSwatches,    setOwnSwatches]    = useState<string[]>(ownColorRules[0]?.swatches ?? ['#ffffff', '#000000', '#ff0000'])
+  // Además de las muestras fijas, permite ofrecer la rueda de color libre
+  // para este asset puntual (igual que "Permitir color personalizado" a
+  // nivel de capa, pero aplicado solo a este asset).
+  const [ownUseWheel,    setOwnUseWheel]    = useState<boolean>(
+    ownColorRules[0]?.mode === 'wheel' || ownColorRules[0]?.mode === 'both'
+  )
 
   function toggleOwnKeyword(id: string) {
     setOwnKeywordIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])
@@ -172,7 +178,7 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
             target_layer_key: asset.layerKey,
             target_asset_id:  asset.id,
             target_role:      ownTargetRole,
-            mode:             'swatches',
+            mode:             ownUseWheel ? 'both' : 'swatches',
             swatches:         ownSwatches,
           }),
         })
@@ -518,6 +524,12 @@ export default function AssetInspector({ asset, assets, keywords, layers, colorU
                     </button>
                     </div>
                   </div>
+                  <Toggle
+                    label="Rueda de color libre"
+                    hint="Además de las muestras fijas de arriba, deja que el usuario elija cualquier color con la rueda"
+                    value={ownUseWheel}
+                    onChange={setOwnUseWheel}
+                  />
                 </div>
               )}
             </div>
